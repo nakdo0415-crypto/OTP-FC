@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f8fafc">
+    
+    <title>OTP FC 명단 관리</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Esamanru', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        @font-face { font-family: 'Esamanru'; font-weight: 700; src: url('esamanru%20Bold.ttf') format('truetype'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 500; src: url('esamanru%20Medium.ttf') format('truetype'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 300; src: url('esamanru%20Light.ttf') format('truetype'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 400; src: url('esamanru%20Medium.ttf') format('truetype'); }
+
+        body { 
+            font-family: 'Esamanru', sans-serif !important;
+            -webkit-tap-highlight-color: transparent; 
+            background-color: #f8fafc;
+            user-select: none;
+            overscroll-behavior-y: none;
+            -webkit-font-smoothing: antialiased;
+            touch-action: manipulation;
+            height: 100%;
+        }
+
+        .animate-zoom-in { animation: zoomIn 0.2s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        button:active { transform: scale(0.95); opacity: 0.8; }
+        
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .safe-pb { padding-bottom: env(safe-area-inset-bottom); }
+        .safe-pt { padding-top: env(safe-area-inset-top); }
+
+        select, input { outline: none; transition: border-color 0.2s; }
+        select:focus, input:focus { border-color: #3b82f6 !important; }
+        
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="mt-4 font-bold text-slate-500 italic">서버 연결 중...</p>
+    </div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        
+        const STAFF_ROLES = ['회장', '매니저', '총무', '부총무'];
+        const POSITIONS = ['ALL', '피보', '아라', '픽소'];
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCAcQzliuWJTB8vPm9gb0vsyR8pIAx7YTw",
+            authDomain: "otp-fc-check.firebaseapp.com",
+            projectId: "otp-fc-check",
+            storageBucket: "otp-fc-check.firebasestorage.app",
+            messagingSenderId: "907414776392",
+            appId: "1:907414776392:web:0a29a660bb956e5a40467d"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const APP_ID = 'otp-fc-attendance';
+
+        const getCol = (name) => db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection(name);
+        const getMonthlyCol = () => db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('monthly_checks');
+        const getMemberCol = () => getCol('members');
+
+        const getPosColorClass = (pos) => {
+            if (!pos) return 'bg-slate-50 text-slate-400 border-slate-100';
+            const p = String(pos).toLowerCase();
+            if (p.includes('피보')) return 'bg-red-50 text-red-500 border-red-100';
+            if (p.includes('아라')) return 'bg-green-50 text-green-600 border-green-100';
+            if (p.includes('픽소')) return 'bg-blue-50 text-blue-500 border-blue-100';
+            if (p.includes('골레이로')) return 'bg-purple-50 text-purple-600 border-purple-100';
+            return 'bg-yellow-50 text-yellow-600 border-yellow-100';
+        };
+
+        const getGenderPastelClass = (gender) => gender === '남성' ? 'bg-[#E1F0FF] text-[#2563EB]' : 'bg-[#FFE5ED] text-[#DB2777]';
+
+        const getRoleBadgeClass = (role) => {
+            switch(role) {
+                case '회장': return 'bg-slate-900 text-white';
+                case '매니저': return 'bg-blue-600 text-white';
+                case '총무': return 'bg-green-600 text-white';
+                case '부총무': return 'bg-green-100 text-green-700';
+                default: return 'bg-slate-100 text-slate-400';
+            }
+        };
+
+        const formatBirth = (birth) => {
+            if (!birth) return '생일미입력';
+            const clean = String(birth).replace(/[^0-9]/g, '');
+            return clean.length === 8 ? `${clean.substring(0,4)}-${clean.substring(4,6)}-${clean.substring(6,8)}` : birth;
+        };
+
+        const formatLocalDate = (d) => {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+
+        const calculateEndDate = (startMonthStr, durationMonths) => {
+            if (!startMonthStr) return '';
+            const [y, m] = startMonthStr.split('-').map(Number);
+            const end = new Date(y, m - 1 + durationMonths + 1, 0); 
+            return formatLocalDate(end);
+        };
+
+        const extendEndDate = (currentEndDateStr, monthsToAdd = 1) => {
+            if (!currentEndDateStr) return '';
+            const [y, m] = currentEndDateStr.split('-').map(Number);
+            const end = new Date(y, m + monthsToAdd, 0); 
+            return formatLocalDate(end);
+        };
+
+        const getMembershipStatus = (member, targetMonthStr) => {
+            if (!member.membershipType || member.membershipType === 'monthly' || !member.membershipEndDate) return null;
+            const end = new Date(member.membershipEndDate);
+            const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+            const [y, m] = targetMonthStr.split('-').map(Number);
+            const current = new Date(y, m - 1, 1);
+            if (current > endMonth) return { active: false, msg: '만료됨', type: member.membershipType === 'half_year' ? '반년' : '1년' };
+            let monthsRemaining = (endMonth.getFullYear() - current.getFullYear()) * 12 + (endMonth.getMonth() - current.getMonth()) + 1;
+            const maxRest = member.membershipType === 'half_year' ? 3 : 6;
+            const usedRest = member.totalRestMonths || 0;
+            const remainingRest = maxRest - usedRest;
+            const endDateFormatted = `${end.getFullYear().toString().slice(2)}.${String(end.getMonth() + 1).padStart(2, '0')}.${String(end.getDate()).padStart(2, '0')}`;
+            return { active: true, remaining: monthsRemaining, type: member.membershipType === 'half_year' ? '반년' : '1년', endDate: member.membershipEndDate, endDateFormatted, maxRest, usedRest, remainingRest };
+        };
+
+        const getMemberStatusType = (member, statuses, reasons, targetMonthStr) => {
+            if (STAFF_ROLES.includes(member.role)) return 'staff';
+            if (member.isSpecialRest && targetMonthStr >= (member.specialRestStartMonth || '0000-00')) {
+                return 'special';
+            }
+            const status = statuses[member.id];
+            const reason = reasons[member.id];
+            const membershipInfo = getMembershipStatus(member, targetMonthStr);
+            if (membershipInfo && membershipInfo.active) {
+                if (status === 'rest') return 'rest';
+                return membershipInfo.type === '반년' ? 'half' : 'full';
+            }
+            if (status === 'paid') return 'monthly';
+            if (status === 'rest') return reason ? 'special' : 'rest';
+            return 'unpaid';
+        };
+
+        const Icon = {
+            UserPlus: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
+            UserMinus: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/></svg>,
+            UserCheck: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>,
+            Edit: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+            Trash: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+            Heart: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>,
+            ChevronRight: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 18 15 12 9 6"/></svg>,
+            ShieldCheck: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+            LogOut: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+            Refresh: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg>,
+            FileSpreadsheet: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>,
+            Save: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+            CheckCircle: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+            Coffee: ({size=16, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>,
+            Bookmark: ({size=16, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>,
+            AlertCircle: ({size=16, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Calendar: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+            RotateCcw: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg>,
+            Lock: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+        };
+
+        function App() {
+            const [members, setMembers] = useState([]);
+            const [alertModal, setAlertModal] = useState({ show: false, title: '', content: '', type: 'info', onConfirm: null });
+            
+            // 로그인
+            const [loggedInManager, setLoggedInManager] = useState(() => {
+                try {
+                    const stored = localStorage.getItem('otp_attendance_manager');
+                    return stored ? JSON.parse(stored) : null;
+                } catch (e) { return null; }
+            });
+            const [isLoginModalOpen, setIsLoginModalOpen] = useState(!loggedInManager);
+            const [loginForm, setLoginForm] = useState({ name: '' });
+
+            // 탭 및 필터
+            const [memberSubTab, setMemberSubTab] = useState(() => sessionStorage.getItem('otp_sub_tab') || 'directory'); 
+            const [targetMonth, setTargetMonth] = useState(() => {
+                const stored = sessionStorage.getItem('otp_target_month');
+                if (stored) return stored;
+                const now = new Date();
+                return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            });
+            const [filterCategory, setFilterCategory] = useState('all'); 
+            
+            // 월별 상태 데이터
+            const [monthlyStatuses, setMonthlyStatuses] = useState({}); 
+            const [monthlyParticipants, setMonthlyParticipants] = useState([]); 
+            const [monthlyReasons, setMonthlyReasons] = useState({}); 
+            const [monthlyPaymentDates, setMonthlyPaymentDates] = useState({}); 
+
+            // 모달 관리
+            const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false); 
+            const [newMember, setNewMember] = useState({ 
+                name: '', birth: '', gender: '남성', position: 'all', level: '1', role: '회원', coupleId: '', isEarlyBirth: false 
+            });
+            const [editingMember, setEditingMember] = useState(null);
+            
+            const [resigningMember, setResigningMember] = useState(null);
+            const [resignForm, setResignForm] = useState({ date: '', reason: '', isForced: false });
+
+            // 월별 액션 폼
+            const [selectedMonthlyMember, setSelectedMonthlyMember] = useState(null); 
+            const [actionStep, setActionStep] = useState('main'); 
+            const [selectedAction, setSelectedAction] = useState(null); 
+            const [paymentDateInput, setPaymentDateInput] = useState(''); 
+            const [manualEndDate, setManualEndDate] = useState(''); 
+            const [specialRestReason, setSpecialRestReason] = useState(''); 
+            const [tempRestCount, setTempRestCount] = useState(0);
+
+            // 명단 캡쳐/복사
+            const [listModalData, setListModalData] = useState(null); 
+            const [isCapturing, setIsCapturing] = useState(false); 
+            const [capturedImage, setCapturedImage] = useState(null); 
+
+            const activeMembers = useMemo(() => members.filter(m => !m.isResigned), [members]);
+            const resignedMembers = useMemo(() => members.filter(m => m.isResigned), [members]);
+            const managers = useMemo(() => activeMembers.filter(m => STAFF_ROLES.includes(m.role)).sort((a,b) => a.name.localeCompare(b.name)), [activeMembers]);
+
+            useEffect(() => { sessionStorage.setItem('otp_sub_tab', memberSubTab); }, [memberSubTab]);
+            useEffect(() => { sessionStorage.setItem('otp_target_month', targetMonth); }, [targetMonth]);
+
+            const filteredMonthlyMembers = useMemo(() => {
+                let list = [...activeMembers].sort((a,b)=>a.name.localeCompare(b.name));
+                if (filterCategory !== 'all') {
+                    list = list.filter(m => {
+                        const type = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
+                        return type === filterCategory;
+                    });
+                }
+                return list;
+            }, [activeMembers, filterCategory, monthlyStatuses, monthlyReasons, targetMonth]);
+
+            const filterCounts = useMemo(() => {
+                const counts = { all: activeMembers.length, monthly: 0, half: 0, full: 0, rest: 0, special: 0, unpaid: 0 };
+                activeMembers.forEach(m => {
+                    const type = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
+                    if (type !== 'staff') { 
+                        if (counts[type] !== undefined) counts[type]++;
+                    }
+                });
+                return counts;
+            }, [activeMembers, monthlyStatuses, monthlyReasons, targetMonth]);
+
+            const showAlert = (title, content, type = 'info', onConfirm = null) => setAlertModal({ show: true, title, content, type, onConfirm });
+            const showConfirm = (title, content, onConfirm) => setAlertModal({ show: true, title, content, type: 'confirm', onConfirm });
+
+            const getCoupleName = (id) => {
+                const c = members.find(m => m.id === id);
+                return c ? c.name : '';
+            };
+
+            const handleLogin = () => {
+                if (!loginForm.name) return showAlert("알림", "로그인할 운영진을 선택해주세요.");
+                const user = members.find(m => m.name === loginForm.name);
+                if (!user) return showAlert("오류", "해당 사용자를 찾을 수 없습니다.");
+                localStorage.setItem('otp_attendance_manager', JSON.stringify(user));
+                setLoggedInManager(user);
+                setIsLoginModalOpen(false);
+                setLoginForm({ name: '' });
+                showAlert("환영합니다", `${user.name} ${user.role}님 환영합니다!`);
+            };
+
+            const handleLogout = () => {
+                localStorage.removeItem('otp_attendance_manager');
+                setLoggedInManager(null);
+                setIsLoginModalOpen(true);
+            };
+
+            const handleAddMember = async () => {
+                if (!newMember.name.trim()) return showAlert("알림", "이름을 입력해주세요.");
+                const birthClean = String(newMember.birth).replace(/[^0-9]/g, '');
+                try {
+                    await getMemberCol().add({ ...newMember, birth: birthClean, createdAt: new Date().toISOString() });
+                    setNewMember({ name: '', birth: '', gender: '남성', position: 'all', level: '1', role: '회원', coupleId: '', isEarlyBirth: false });
+                    setIsAddMemberModalOpen(false);
+                    showAlert("성공", "회원이 등록되었습니다.");
+                } catch (e) { showAlert("오류", "회원 등록 실패"); }
+            };
+
+            const handleUpdateMember = async () => {
+                try {
+                    await getMemberCol().doc(editingMember.id).update({ ...editingMember, birth: String(editingMember.birth).replace(/[^0-9]/g, '') });
+                    setEditingMember(null);
+                    showAlert("완료", "정보가 수정되었습니다.");
+                } catch (e) { showAlert("오류", "수정 실패"); }
+            };
+
+            const handleResignConfirm = async () => {
+                if (!resignForm.date) return showAlert("알림", "탈퇴 일자를 선택해주세요.");
+                try {
+                    await getMemberCol().doc(resigningMember.id).update({
+                        isResigned: true,
+                        resignDate: resignForm.date,
+                        resignReason: resignForm.reason || '사유 미작성',
+                        isForcedResign: resignForm.isForced
+                    });
+                    setResigningMember(null);
+                    showAlert("성공", `${resigningMember.name} 님이 탈퇴 처리되었습니다.`);
+                } catch (e) {
+                    console.error(e);
+                    showAlert("오류", "탈퇴 처리에 실패했습니다.");
+                }
+            };
+
+            const moveMonth = (offset) => {
+                const [y, m] = targetMonth.split('-').map(Number);
+                const d = new Date(y, m - 1 + offset, 1);
+                const nextY = d.getFullYear();
+                const nextM = String(d.getMonth() + 1).padStart(2, '0');
+                setTargetMonth(`${nextY}-${nextM}`);
+            };
+
+            const handleMemberClick = (m) => {
+                setSelectedMonthlyMember(m);
+                setActionStep('main');
+                setSelectedAction(null);
+                
+                if (monthlyPaymentDates[m.id]) {
+                    setPaymentDateInput(monthlyPaymentDates[m.id]);
+                } else {
+                    const today = new Date();
+                    const offset = today.getTimezoneOffset() * 60000;
+                    setPaymentDateInput((new Date(today - offset)).toISOString().split('T')[0]);
+                }
+                setSpecialRestReason(monthlyReasons[m.id] || '');
+                setTempRestCount(m.totalRestMonths || 0);
+                setManualEndDate(m.membershipEndDate || '');
+            };
+
+            const handleActionClick = (actionType) => {
+                setSelectedAction(actionType);
+                setActionStep('form');
+                
+                if (actionType === 'start_half') {
+                    const endDateStr = calculateEndDate(targetMonth, 6);
+                    setManualEndDate(endDateStr);
+                    setTempRestCount(0);
+                } else if (actionType === 'start_full') {
+                    const endDateStr = calculateEndDate(targetMonth, 12);
+                    setManualEndDate(endDateStr);
+                    setTempRestCount(0);
+                }
+            };
+
+            const processActionImmediate = async (actionType) => {
+                if (!selectedMonthlyMember || !targetMonth) return;
+                try {
+                    const batch = db.batch();
+                    const monthRef = getMonthlyCol().doc(targetMonth);
+                    const memberRef = getMemberCol().doc(selectedMonthlyMember.id);
+                    const memberId = selectedMonthlyMember.id;
+                    
+                    if (actionType === 'monthly_paid') {
+                        batch.set(monthRef, { statuses: { [memberId]: 'paid' }, paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                        batch.update(monthRef, { [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                        batch.update(memberRef, { membershipType: 'monthly', membershipStartDate: '', membershipEndDate: '', totalRestMonths: 0 });
+                    } else if (actionType === 'start_half') {
+                        const finalEndDate = manualEndDate || calculateEndDate(targetMonth, 6);
+                        batch.update(memberRef, { membershipType: 'half_year', membershipStartDate: `${targetMonth}-01`, membershipEndDate: finalEndDate, totalRestMonths: 0 });
+                        batch.set(monthRef, { paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                        batch.update(monthRef, { [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                    } else if (actionType === 'start_full') {
+                        const finalEndDate = manualEndDate || calculateEndDate(targetMonth, 12);
+                        batch.update(memberRef, { membershipType: 'full_year', membershipStartDate: `${targetMonth}-01`, membershipEndDate: finalEndDate, totalRestMonths: 0 });
+                        batch.set(monthRef, { paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                        batch.update(monthRef, { [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                    } else if (actionType === 'rest') {
+                        if (selectedMonthlyMember.membershipType === 'half_year' && (selectedMonthlyMember.totalRestMonths || 0) >= 3) {
+                            return showAlert("알림", "반년납 회원은 휴식을 최대 3회까지만 사용할 수 있습니다.");
+                        }
+                        if (selectedMonthlyMember.membershipType === 'full_year' && (selectedMonthlyMember.totalRestMonths || 0) >= 6) {
+                            return showAlert("알림", "1년납 회원은 휴식을 최대 6회까지만 사용할 수 있습니다.");
+                        }
+
+                        batch.set(monthRef, { statuses: { [memberId]: 'rest' }, paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                        batch.update(monthRef, { [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                        
+                        if (selectedMonthlyMember.membershipType === 'half_year' || selectedMonthlyMember.membershipType === 'full_year') {
+                            const nextEndDate = extendEndDate(selectedMonthlyMember.membershipEndDate, 1);
+                            batch.update(memberRef, { membershipEndDate: nextEndDate, totalRestMonths: firebase.firestore.FieldValue.increment(1) });
+                        }
+                    } else if (actionType === 'special_rest') {
+                        batch.update(memberRef, {
+                            isSpecialRest: true,
+                            specialRestReason: specialRestReason || '특별 휴식',
+                            specialRestStartMonth: targetMonth
+                        });
+                        batch.update(monthRef, { 
+                            [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), 
+                            [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete(), 
+                            [`paymentDates.${memberId}`]: firebase.firestore.FieldValue.delete() 
+                        });
+                    } else if (actionType === 'cancel_special_rest') {
+                        const startMonth = selectedMonthlyMember.specialRestStartMonth;
+                        let monthsToExtend = 0;
+                        if (startMonth) {
+                            const [sy, sm] = startMonth.split('-').map(Number);
+                            const [ty, tm] = targetMonth.split('-').map(Number);
+                            monthsToExtend = (ty - sy) * 12 + (tm - sm);
+                        }
+                        if (monthsToExtend < 0) monthsToExtend = 0;
+
+                        const updates = {
+                            isSpecialRest: false,
+                            specialRestReason: firebase.firestore.FieldValue.delete(),
+                            specialRestStartMonth: firebase.firestore.FieldValue.delete()
+                        };
+
+                        if (monthsToExtend > 0 && (selectedMonthlyMember.membershipType === 'half_year' || selectedMonthlyMember.membershipType === 'full_year')) {
+                            updates.membershipEndDate = extendEndDate(selectedMonthlyMember.membershipEndDate, monthsToExtend);
+                        }
+                        
+                        batch.update(memberRef, updates);
+                    } else if (actionType === 'clear') {
+                        batch.update(monthRef, { [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete(), [`paymentDates.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                    } else if (actionType === 'cancel_rest') {
+                        batch.update(monthRef, { [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete(), [`paymentDates.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                        const reason = monthlyReasons[memberId];
+                        if (selectedMonthlyMember.membershipType === 'half_year' || selectedMonthlyMember.membershipType === 'full_year') {
+                            const prevEndDate = extendEndDate(selectedMonthlyMember.membershipEndDate, -1);
+                            const updatePayload = { membershipEndDate: prevEndDate };
+                            if (!reason) { updatePayload.totalRestMonths = firebase.firestore.FieldValue.increment(-1); }
+                            batch.update(memberRef, updatePayload);
+                        }
+                    } else if (actionType === 'end_membership') {
+                        batch.update(memberRef, { membershipType: 'monthly', membershipStartDate: '', membershipEndDate: '', totalRestMonths: 0 });
+                        batch.update(monthRef, { [`statuses.${memberId}`]: firebase.firestore.FieldValue.delete(), [`reasons.${memberId}`]: firebase.firestore.FieldValue.delete() });
+                    } else if (actionType === 'update_payment_date') {
+                        batch.set(monthRef, { paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                    } else if (actionType === 'update_longterm_info') {
+                        batch.update(memberRef, { membershipEndDate: manualEndDate, totalRestMonths: tempRestCount });
+                        batch.set(monthRef, { paymentDates: { [memberId]: paymentDateInput }, updatedAt: new Date().toISOString() }, { merge: true });
+                    }
+
+                    await batch.commit();
+                    setSelectedMonthlyMember(null);
+                    showAlert("성공", "상태가 성공적으로 반영되었습니다.");
+                } catch(e) {
+                    console.error(e);
+                    showAlert("오류", "상태 처리에 실패했습니다.");
+                }
+            };
+
+            const handleShowListModal = (listType) => {
+                let filtered = [];
+                let title = "";
+
+                const sortedMembers = [...activeMembers].sort((a,b) => a.name.localeCompare(b.name));
+
+                if (listType === 'unpaid') {
+                    filtered = sortedMembers.filter(m => getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth) === 'unpaid');
+                    title = `${targetMonth} 미납자 명단`;
+                } else if (listType === 'half') {
+                    filtered = sortedMembers.filter(m => {
+                        if (STAFF_ROLES.includes(m.role)) return false;
+                        const info = getMembershipStatus(m, targetMonth);
+                        return info && info.active && info.type === '반년';
+                    });
+                    title = `${targetMonth} 반년납 명단`;
+                } else if (listType === 'full') {
+                    filtered = sortedMembers.filter(m => {
+                        if (STAFF_ROLES.includes(m.role)) return false;
+                        const info = getMembershipStatus(m, targetMonth);
+                        return info && info.active && info.type === '1년';
+                    });
+                    title = `${targetMonth} 1년납 명단`;
+                } else if (listType === 'rest_all') {
+                    filtered = sortedMembers.filter(m => {
+                        const t = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
+                        return t === 'rest' || t === 'special';
+                    });
+                    title = `${targetMonth} 휴식자 명단 (전체)`;
+                }
+
+                if (filtered.length === 0) {
+                    return showAlert("알림", "해당하는 인원이 없습니다.");
+                }
+
+                const items = filtered.map(m => {
+                    let tag = null;
+                    let details = null;
+
+                    const info = getMembershipStatus(m, targetMonth);
+                    const statusType = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
+
+                    if (listType === 'half' || listType === 'full') {
+                        if (statusType === 'rest' || statusType === 'special') tag = "휴식";
+                        
+                        if (info) {
+                            details = `${info.endDateFormatted} 만료 | 잔여휴식 ${info.remainingRest}회`;
+                            if (statusType === 'special') {
+                                details += ` | 사유: ${m.specialRestReason || '특별휴식'}`;
+                            } else if (statusType === 'rest') {
+                                details += ` | 사유: ${info.type} 휴식`;
+                            }
+                        }
+                    } else if (listType === 'rest_all') {
+                        tag = '휴식';
+                        if (statusType === 'special') {
+                            details = `사유: ${m.specialRestReason || '특별휴식'}`;
+                        } else if (info && info.active) {
+                            details = `사유: ${info.type} 휴식`;
+                        } else {
+                            details = `사유: 일반 휴식`;
+                        }
+                    }
+                    
+                    if (monthlyPaymentDates[m.id]) {
+                        details = details ? `${details} | 납부일: ${monthlyPaymentDates[m.id]}` : `납부일: ${monthlyPaymentDates[m.id]}`;
+                    }
+                    
+                    return { id: m.id, name: m.name, tag, details };
+                });
+
+                setListModalData({ title, count: filtered.length, items });
+                setCapturedImage(null); 
+            };
+
+            const fallbackCopy = (text) => {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.top = "0";
+                textArea.style.left = "0";
+                textArea.style.opacity = "0";
+                document.body.appendChild(textArea);
+                
+                if (navigator.userAgent.match(/ipad|iphone|mac/i)) {
+                    const range = document.createRange();
+                    range.selectNodeContents(textArea);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    textArea.setSelectionRange(0, 999999);
+                } else {
+                    textArea.select();
+                }
+
+                try {
+                    document.execCommand('copy');
+                    setListModalData(null);
+                    setCapturedImage(null);
+                    showAlert("복사 완료", `클립보드에 복사되었습니다.\n\n카카오톡 등 원하는 곳에 붙여넣기 하세요!`);
+                } catch (err) {
+                    showAlert("오류", "복사에 실패했습니다. 권한을 확인해주세요.");
+                } finally {
+                    document.body.removeChild(textArea);
+                }
+            };
+
+            const handleCopyFromModal = () => {
+                if (!listModalData) return;
+                const names = listModalData.items.map(item => {
+                    let str = `- ${item.name}`;
+                    if (item.tag) str += ` [${item.tag}]`;
+                    if (item.details) str += ` (${item.details})`;
+                    return str;
+                }).join('\n');
+                
+                const textToCopy = `[ ${listModalData.title} ]\n총 ${listModalData.count}명\n\n${names}`;
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        setListModalData(null);
+                        setCapturedImage(null);
+                        showAlert("복사 완료", `클립보드에 복사되었습니다.\n\n카카오톡 등 원하는 곳에 붙여넣기 하세요!`);
+                    }).catch(() => fallbackCopy(textToCopy));
+                } else {
+                    fallbackCopy(textToCopy);
+                }
+            };
+
+            const handleCaptureImage = () => {
+                setIsCapturing(true); 
+                setTimeout(() => {
+                    const target = document.getElementById('capture-area');
+                    if (target) {
+                        html2canvas(target, {
+                            scale: 2, 
+                            backgroundColor: '#ffffff',
+                            useCORS: true 
+                        }).then(canvas => {
+                            const imageBase64 = canvas.toDataURL('image/png');
+                            setCapturedImage(imageBase64); 
+                            setIsCapturing(false); 
+                        }).catch(err => {
+                            console.error(err);
+                            setIsCapturing(false);
+                            showAlert("오류", "이미지 생성에 실패했습니다.");
+                        });
+                    } else {
+                        setIsCapturing(false);
+                    }
+                }, 300);
+            };
+
+            const handleDownloadImage = () => {
+                if (!capturedImage) return;
+                const link = document.createElement('a');
+                link.download = `${listModalData?.title || '명단'}.png`;
+                link.href = capturedImage;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            useEffect(() => {
+                const initAuth = async () => {
+                    const timeout = setTimeout(() => {
+                         const loader = document.getElementById('loading-screen');
+                         if(loader) loader.style.opacity = '0';
+                         setTimeout(() => { if(loader) loader.style.display = 'none'; }, 500);
+                    }, 1000); 
+
+                    try { 
+                        await auth.signInAnonymously();
+                    } catch (e) { 
+                        console.error(e); 
+                    } finally {
+                        clearTimeout(timeout);
+                        const loader = document.getElementById('loading-screen');
+                        if(loader) {
+                            loader.style.opacity = '0';
+                            setTimeout(() => { loader.style.display = 'none'; }, 500);
+                        }
+                    }
+                };
+                initAuth();
+                
+                 const unsubAuth = auth.onAuthStateChanged(u => {
+                    if (u) {
+                        getMemberCol().onSnapshot(snap => setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                    }
+                });
+                return () => unsubAuth();
+            }, []);
+            
+            useEffect(() => {
+                if (targetMonth) {
+                    const unsubMonthly = getMonthlyCol().doc(targetMonth).onSnapshot(doc => {
+                        if (doc.exists) {
+                            const data = doc.data();
+                            if (data.statuses) {
+                                setMonthlyStatuses(data.statuses);
+                                setMonthlyParticipants(Object.keys(data.statuses).filter(id => data.statuses[id] === 'paid'));
+                            } else if (data.memberIds) {
+                                const newStatuses = {};
+                                data.memberIds.forEach(id => newStatuses[id] = 'paid');
+                                setMonthlyStatuses(newStatuses);
+                                setMonthlyParticipants(data.memberIds);
+                            } else {
+                                setMonthlyStatuses({});
+                                setMonthlyParticipants([]);
+                            }
+
+                            if (data.reasons) {
+                                setMonthlyReasons(data.reasons);
+                            } else {
+                                setMonthlyReasons({});
+                            }
+
+                            if (data.paymentDates) {
+                                setMonthlyPaymentDates(data.paymentDates);
+                            } else {
+                                setMonthlyPaymentDates({});
+                            }
+                        } else {
+                            setMonthlyStatuses({});
+                            setMonthlyParticipants([]);
+                            setMonthlyReasons({});
+                            setMonthlyPaymentDates({});
+                        }
+                    });
+                    return () => unsubMonthly();
+                }
+            }, [targetMonth]);
+            
+            return (
+                <div className="min-h-screen pb-40 text-slate-900">
+                    {!isLoginModalOpen && (
+                        <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b z-50 h-16 sm:h-20 flex items-center px-4 shadow-sm text-slate-900 transition-all">
+                            <div className="max-w-6xl mx-auto w-full flex justify-between items-center text-left">
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-2xl font-black text-[#db2777] tracking-tighter uppercase leading-none drop-shadow-sm">OTP FC</h1>
+                                    <span className="text-slate-400 font-bold text-xs uppercase hidden sm:block">명단 관리 시스템</span>
+                                </div>
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                    {loggedInManager && (
+                                        <button className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-600">
+                                            <Icon.ShieldCheck size={14} className="text-blue-600" />
+                                            {loggedInManager.name} ({loggedInManager.role})
+                                        </button>
+                                    )}
+                                    <button onClick={() => window.location.reload()} className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all shadow-none border-none"><Icon.Refresh size={18} /></button>
+                                    <button onClick={handleLogout} className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 transition-all shadow-none border-none"><Icon.LogOut size={18} /></button>
+                                </div>
+                            </div>
+                        </nav>
+                    )}
+
+                    <main className="p-4 sm:p-8 max-w-6xl mx-auto animate-zoom-in">
+                        {!isLoginModalOpen && (
+                            <div className="max-w-6xl mx-auto pb-24 text-left">
+                                <div className="bg-white p-6 sm:p-10 rounded-[48px] shadow-sm border border-slate-100 mb-10 text-left">
+                                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+                                        <h2 className="text-3xl font-black text-blue-600 tracking-tighter text-left">
+                                            {memberSubTab === 'directory' ? '전체 회원 명단' : 
+                                             memberSubTab === 'monthly' ? '월별 참여자 명단' : 
+                                             '탈퇴자 명단'}
+                                        </h2>
+                                        
+                                        {/* 메인 탭 */}
+                                        <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
+                                            <button 
+                                                onClick={() => setMemberSubTab('directory')}
+                                                className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${memberSubTab === 'directory' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                회원 관리
+                                            </button>
+                                            <button 
+                                                onClick={() => setMemberSubTab('monthly')}
+                                                className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${memberSubTab === 'monthly' ? 'bg-white text-green-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                월별 참여
+                                            </button>
+                                            <button 
+                                                onClick={() => setMemberSubTab('resigned')}
+                                                className={`px-4 py-2 text-xs font-black rounded-lg transition-all ${memberSubTab === 'resigned' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                탈퇴자 명단
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 1. 회원 관리 */}
+                                    {memberSubTab === 'directory' && (
+                                        <div className="animate-fade-in">
+                                            <div className="flex justify-between items-center mb-6">
+                                                <p className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{activeMembers.length}</span>명의 회원이 있습니다.</p>
+                                                <button onClick={() => setIsAddMemberModalOpen(true)} className="px-6 py-2.5 rounded-2xl bg-blue-600 text-white font-black text-sm transition-all shadow-xl shadow-blue-100 flex items-center gap-2 active:scale-95"><Icon.UserPlus size={18}/>회원 등록</button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-xs sm:text-sm text-left">
+                                                {activeMembers.sort((a,b)=>a.name.localeCompare(b.name)).map(m => (
+                                                    <div key={m.id} className="bg-white p-5 sm:p-6 rounded-[32px] border border-slate-100 shadow-sm relative group hover:shadow-md transition-all text-left">
+                                                        <div className="flex items-start gap-4 text-left">
+                                                            <div className={`flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-lg sm:text-xl font-black shadow-lg ${getGenderPastelClass(m.gender)}`}>{m.level}</div>
+                                                            <div className="flex flex-col min-w-0 flex-1">
+                                                                <div className="flex items-center justify-between w-full mb-1.5">
+                                                                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 whitespace-nowrap">{m.name}</h3>
+                                                                    <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                                                        <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 p-1.5 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.Edit size={14}/></button>
+                                                                        <button onClick={() => {
+                                                                            setResigningMember(m);
+                                                                            setResignForm({ date: new Date().toISOString().split('T')[0], reason: '', isForced: false });
+                                                                        }} className="text-slate-400 hover:text-orange-500 p-1.5 bg-slate-50 hover:bg-orange-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.UserMinus size={14}/></button>
+                                                                        <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className="text-slate-400 hover:text-red-500 p-1.5 bg-slate-50 hover:bg-red-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.Trash size={14}/></button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-nowrap items-center gap-1.5 w-full overflow-x-auto no-scrollbar whitespace-nowrap pb-1">
+                                                                    <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
+                                                                    {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
+                                                                    {m.coupleId && <span className="flex-shrink-0 inline-flex items-center gap-1 bg-pink-50 text-pink-500 px-2 py-0.5 rounded-full text-[10px] font-black border border-pink-100 shadow-sm"><Icon.Heart size={10} className="animate-pulse"/> {getCoupleName(m.coupleId)}</span>}
+                                                                </div>
+                                                                <div className="mt-1 whitespace-nowrap">
+                                                                    <span className="text-[11px] font-bold text-slate-400">{formatBirth(m.birth)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {activeMembers.length === 0 && (
+                                                    <div className="col-span-full py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                        등록된 활성 회원이 없습니다.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 2. 월별 참여 관리 */}
+                                    {memberSubTab === 'monthly' && (
+                                        <div className="animate-fade-in">
+                                            <div className="flex justify-center items-center gap-4 mb-4">
+                                                <button onClick={() => moveMonth(-1)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Icon.ChevronRight className="rotate-180" /></button>
+                                                <div className="text-center">
+                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fee Status</p>
+                                                    <h2 className="text-2xl font-black text-slate-900">{targetMonth}</h2>
+                                                </div>
+                                                <button onClick={() => moveMonth(1)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"><Icon.ChevronRight /></button>
+                                            </div>
+                                            
+                                            <div className="flex gap-2 overflow-x-auto pb-4 mb-4 no-scrollbar">
+                                                {['all', 'monthly', 'half', 'full', 'rest', 'special', 'unpaid'].map(cat => {
+                                                    const label = { all: '전체', monthly: '월납', half: '반년', full: '1년', rest: '휴식', special: '특별', unpaid: '미납' }[cat];
+                                                    const count = filterCounts[cat];
+                                                    const isActive = filterCategory === cat;
+                                                    let colorClass = 'bg-slate-100 text-slate-500';
+                                                    if (isActive) {
+                                                        if (cat === 'all') colorClass = 'bg-slate-800 text-white';
+                                                        else if (cat === 'monthly') colorClass = 'bg-green-500 text-white';
+                                                        else if (cat === 'half') colorClass = 'bg-blue-500 text-white';
+                                                        else if (cat === 'full') colorClass = 'bg-purple-500 text-white';
+                                                        else if (cat === 'rest') colorClass = 'bg-yellow-400 text-white';
+                                                        else if (cat === 'special') colorClass = 'bg-indigo-500 text-white';
+                                                        else if (cat === 'unpaid') colorClass = 'bg-red-500 text-white';
+                                                    }
+                                                    return (
+                                                        <button 
+                                                            key={cat} 
+                                                            onClick={() => setFilterCategory(cat)}
+                                                            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black transition-all ${colorClass}`}
+                                                        >
+                                                            {label} <span className="opacity-70 ml-0.5">({count})</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-4 no-scrollbar bg-slate-50 p-3 rounded-2xl">
+                                                <span className="text-[10px] font-black text-slate-400 whitespace-nowrap mr-1 flex items-center gap-1"><Icon.FileSpreadsheet size={12}/> 명단 확인</span>
+                                                <button onClick={() => handleShowListModal('unpaid')} className="flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black transition-all bg-white border border-red-200 text-red-600 hover:bg-red-50 shadow-sm active:scale-95">미납자</button>
+                                                <button onClick={() => handleShowListModal('half')} className="flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black transition-all bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 shadow-sm active:scale-95">반년납</button>
+                                                <button onClick={() => handleShowListModal('full')} className="flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black transition-all bg-white border border-purple-200 text-purple-600 hover:bg-purple-50 shadow-sm active:scale-95">1년납</button>
+                                                <button onClick={() => handleShowListModal('rest_all')} className="flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black transition-all bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 shadow-sm active:scale-95">휴식(전체)</button>
+                                            </div>
+
+                                            <div className="flex flex-col space-y-2">
+                                                <div className="flex items-center px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                    <div className="w-10 text-center">No.</div>
+                                                    <div className="flex-1 pl-2">Name / Info</div>
+                                                    <div className="w-24 text-center">Status / Edit</div>
+                                                </div>
+
+                                                {filteredMonthlyMembers.map((m, idx) => {
+                                                    const status = monthlyStatuses[m.id]; 
+                                                    const reason = monthlyReasons[m.id]; 
+                                                    const membershipInfo = getMembershipStatus(m, targetMonth);
+                                                    const isStaff = STAFF_ROLES.includes(m.role);
+                                                    const isSpecialGlobal = m.isSpecialRest && targetMonth >= (m.specialRestStartMonth || '0000-00');
+                                                    
+                                                    let styleType = 'none';
+                                                    let label = '미납';
+                                                    let restReasonText = null;
+
+                                                    if (isStaff) {
+                                                        styleType = 'staff';
+                                                        label = '운영진';
+                                                    } else if (isSpecialGlobal) {
+                                                        styleType = 'special';
+                                                        label = '특별휴식';
+                                                        restReasonText = m.specialRestReason;
+                                                    } else if (membershipInfo && membershipInfo.active) {
+                                                        if (status === 'rest') {
+                                                            styleType = 'rest';
+                                                            label = '휴식';
+                                                            restReasonText = reason ? reason : `${membershipInfo.type} 휴식`;
+                                                        } else {
+                                                            styleType = membershipInfo.type === '반년' ? 'half' : 'full';
+                                                            label = membershipInfo.type;
+                                                        }
+                                                    } else {
+                                                        if (status === 'paid') {
+                                                            styleType = 'monthly';
+                                                            label = '월납';
+                                                        } else if (status === 'rest') { 
+                                                            styleType = 'rest';
+                                                            label = '휴식';
+                                                            restReasonText = reason ? reason : null;
+                                                        }
+                                                    }
+
+                                                    let containerClass = 'bg-slate-50 border-transparent opacity-60 hover:opacity-80';
+                                                    let indexColor = 'text-slate-400';
+                                                    let nameColor = 'text-slate-500';
+                                                    let badgeClass = 'border-2 border-slate-200 bg-white text-slate-300';
+
+                                                    if (styleType === 'monthly') {
+                                                        containerClass = 'bg-white border-green-200 shadow-sm';
+                                                        indexColor = 'text-green-600';
+                                                        nameColor = 'text-slate-800';
+                                                        badgeClass = 'bg-green-500 text-white shadow-md';
+                                                    } else if (styleType === 'half') {
+                                                        containerClass = 'bg-white border-blue-200 shadow-sm';
+                                                        indexColor = 'text-blue-600';
+                                                        nameColor = 'text-slate-800';
+                                                        badgeClass = 'bg-blue-500 text-white shadow-md';
+                                                    } else if (styleType === 'full') {
+                                                        containerClass = 'bg-white border-purple-200 shadow-sm';
+                                                        indexColor = 'text-purple-600';
+                                                        nameColor = 'text-slate-800';
+                                                        badgeClass = 'bg-purple-500 text-white shadow-md';
+                                                    } else if (styleType === 'rest') {
+                                                        containerClass = 'bg-yellow-50 border-yellow-200 shadow-sm';
+                                                        indexColor = 'text-yellow-600';
+                                                        nameColor = 'text-yellow-800';
+                                                        badgeClass = 'bg-yellow-400 text-white shadow-md';
+                                                    } else if (styleType === 'special') {
+                                                        containerClass = 'bg-indigo-50 border-indigo-200 shadow-sm';
+                                                        indexColor = 'text-indigo-600';
+                                                        nameColor = 'text-indigo-800';
+                                                        badgeClass = 'bg-indigo-500 text-white shadow-md';
+                                                    } else if (styleType === 'staff') {
+                                                        containerClass = 'bg-white border-orange-200 shadow-sm';
+                                                        indexColor = 'text-orange-500';
+                                                        nameColor = 'text-slate-900';
+                                                        badgeClass = 'bg-orange-500 text-white shadow-md';
+                                                    } else {
+                                                        containerClass = 'bg-red-50 border-red-100 shadow-sm';
+                                                        indexColor = 'text-red-400';
+                                                        nameColor = 'text-slate-800';
+                                                        badgeClass = 'bg-red-500 text-white shadow-md';
+                                                    }
+
+                                                    return (
+                                                        <div key={m.id} className={`w-full flex items-center px-4 py-3 rounded-2xl border transition-all ${containerClass}`}>
+                                                            <div className={`w-10 text-center text-sm font-bold ${indexColor}`}>{idx + 1}</div>
+                                                            <button onClick={() => !isStaff && handleMemberClick(m)} className="flex-1 flex flex-col items-start pl-2 text-left" disabled={isStaff}>
+                                                                <span className={`text-base font-black flex flex-wrap items-center gap-1.5 ${nameColor}`}>
+                                                                    {m.name}
+                                                                    {membershipInfo && membershipInfo.active && (
+                                                                        <span className={`text-[9px] font-normal px-1.5 py-0.5 rounded-md border ${
+                                                                            membershipInfo.type === '반년' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'
+                                                                        }`}>
+                                                                            <b className="font-bold">{membershipInfo.endDateFormatted} 만료</b> <span className="opacity-50">|</span> 잔여휴식 <b className="font-bold">{membershipInfo.remainingRest}회</b>
+                                                                        </span>
+                                                                    )}
+                                                                    {restReasonText && (
+                                                                        <span className={`text-[9px] font-normal px-1.5 py-0.5 rounded-md border ${styleType === 'special' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+                                                                            📝 {restReasonText}
+                                                                        </span>
+                                                                    )}
+                                                                    {monthlyPaymentDates[m.id] && (styleType === 'monthly' || styleType === 'rest' || styleType === 'half' || styleType === 'full') && (
+                                                                        <span className="text-[9px] font-normal px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                            💳 {monthlyPaymentDates[m.id]} 납부
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-400 font-bold">{m.level}단 / {m.position} / {m.gender === '남성' ? 'M' : 'F'}</span>
+                                                            </button>
+                                                            <button onClick={() => !isStaff && handleMemberClick(m)} className="w-24 flex justify-center" disabled={isStaff}>
+                                                                {styleType !== 'none' ? (
+                                                                    <div className={`w-16 h-8 rounded-lg flex items-center justify-center text-[10px] font-black ${badgeClass}`}>{label}</div>
+                                                                ) : (
+                                                                    <div className="w-16 h-8 rounded-lg border-2 border-red-100 bg-red-50 text-red-500 flex items-center justify-center text-[10px] font-black shadow-sm">미납</div>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {filteredMonthlyMembers.length === 0 && (
+                                                    <div className="py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                        해당하는 회원이 없습니다.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 3. 탈퇴자 명단 */}
+                                    {memberSubTab === 'resigned' && (
+                                        <div className="animate-fade-in">
+                                            <div className="mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center">
+                                                <p className="text-xs font-bold text-slate-500">총 <span className="text-red-500 font-black">{resignedMembers.length}</span>명의 탈퇴자가 있습니다.</p>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-xs sm:text-sm text-left">
+                                                {resignedMembers.sort((a,b)=>a.name.localeCompare(b.name)).map(m => (
+                                                    <div key={m.id} className="bg-slate-50 p-5 sm:p-6 rounded-[32px] border border-slate-200 shadow-sm relative group hover:shadow-md transition-all text-left opacity-70">
+                                                        <div className="flex items-start gap-4 text-left grayscale">
+                                                            <div className={`flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-lg sm:text-xl font-black shadow-inner ${getGenderPastelClass(m.gender)}`}>{m.level}</div>
+                                                            <div className="flex flex-col min-w-0 flex-1">
+                                                                <div className="flex items-center justify-between w-full mb-1.5">
+                                                                    <h3 className="text-xl sm:text-2xl font-black text-slate-600 whitespace-nowrap line-through decoration-slate-400 decoration-2 flex items-center gap-2">
+                                                                        {m.name}
+                                                                        {m.isForcedResign && <span className="text-[9px] px-1.5 py-0.5 bg-red-100 text-red-600 border border-red-200 rounded font-black not-italic no-underline">강제탈퇴</span>}
+                                                                    </h3>
+                                                                    <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                                                        <button onClick={() => showConfirm("복구", `${m.name} 님을 다시 활성 회원으로 복구하시겠습니까?`, async () => { 
+                                                                            await getMemberCol().doc(m.id).update({
+                                                                                isResigned: false,
+                                                                                resignDate: firebase.firestore.FieldValue.delete(),
+                                                                                resignReason: firebase.firestore.FieldValue.delete(),
+                                                                                isForcedResign: firebase.firestore.FieldValue.delete()
+                                                                            }); 
+                                                                        })} className="text-slate-400 hover:text-green-500 p-1.5 bg-white hover:bg-green-50 rounded-lg shadow-sm outline-none border-none transition-all"><Icon.UserCheck size={14}/></button>
+                                                                        <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className="text-slate-400 hover:text-red-500 p-1.5 bg-white hover:bg-red-50 rounded-lg shadow-sm outline-none border-none transition-all"><Icon.Trash size={14}/></button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-nowrap items-center gap-1.5 w-full overflow-x-auto no-scrollbar whitespace-nowrap pb-1">
+                                                                    <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
+                                                                    {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
+                                                                </div>
+                                                                <div className="mt-1 whitespace-nowrap">
+                                                                    <span className="text-[11px] font-bold text-slate-400">{formatBirth(m.birth)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3 p-3 bg-white/50 rounded-xl border border-slate-200 text-[10px] flex flex-col gap-1 w-full text-slate-500">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="font-bold opacity-70">탈퇴일</span>
+                                                                <span className="font-black">{m.resignDate || '-'}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="font-bold opacity-70">사유</span>
+                                                                <span className="font-black truncate max-w-[120px] text-right" title={m.resignReason}>{m.resignReason || '-'}</span>
+                                                            </div>
+                                                            {m.isForcedResign && (
+                                                                <div className="mt-1 text-red-500 font-black text-right border-t border-slate-200 pt-1 flex justify-end gap-1 items-center">
+                                                                    <Icon.Lock size={10} /> 6개월간 재가입 불가
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {resignedMembers.length === 0 && (
+                                                    <div className="col-span-full py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                        탈퇴한 회원이 없습니다.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* 로그인 모달 */}
+                    {isLoginModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[9000] flex items-center justify-center p-4">
+                            <div className="bg-white rounded-[48px] w-full max-w-md p-10 shadow-2xl animate-zoom-in text-center border-2 border-blue-50">
+                                <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-100 text-white"><Icon.ShieldCheck size={40} /></div>
+                                <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter uppercase">Admin Login</h2>
+                                <p className="text-slate-400 text-sm font-bold mb-8 tracking-widest uppercase text-xs text-center">명단 관리 시스템</p>
+                                
+                                <div className="space-y-6 mb-8 text-left">
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[10px] font-black text-slate-400 ml-1 uppercase">Select Manager</label>
+                                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                            {managers.length > 0 ? (
+                                                managers.map(m => (
+                                                    <button
+                                                        key={m.id}
+                                                        onClick={() => setLoginForm({ name: m.name })}
+                                                        className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center min-h-[70px] active:scale-95 ${
+                                                            loginForm.name === m.name 
+                                                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-2 ring-blue-200 ring-offset-2' 
+                                                            : 'border-slate-100 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:border-slate-200'
+                                                        }`}
+                                                    >
+                                                        <span className="font-black text-sm">{m.name}</span>
+                                                        <span className="text-[10px] font-bold opacity-70 mt-0.5">{m.role}</span>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="col-span-2 py-4 text-center text-xs text-slate-400 font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                                    등록된 운영진이 없습니다.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={handleLogin} 
+                                    disabled={!loginForm.name}
+                                    className={`w-full py-5 rounded-3xl font-black text-xl shadow-xl transition-all uppercase text-center ${
+                                        loginForm.name 
+                                        ? 'bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700 active:scale-95' 
+                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    Login
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 회원 등록 모달 */}
+                    {isAddMemberModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[600] flex items-center justify-center p-4" onClick={() => setIsAddMemberModalOpen(false)}>
+                            <div className="bg-white rounded-[48px] w-full max-w-lg p-10 shadow-2xl animate-zoom-in text-left text-xs" onClick={e => e.stopPropagation()}>
+                                <h2 className="text-2xl font-black mb-8 text-blue-600 tracking-tighter">신규 회원 등록</h2>
+                                <div className="grid grid-cols-2 gap-4 mb-8 text-left text-xs">
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">이름</label><input type="text" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={newMember.name} onChange={e=>setNewMember({...newMember, name: e.target.value})} placeholder="이름 입력" /></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">성별</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={newMember.gender} onChange={e=>setNewMember({...newMember, gender: e.target.value, level: e.target.value==='남성'?'1':'7'})}><option>남성</option><option>여성</option></select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">생년월일 (YYMMDD)</label><input type="text" inputMode="numeric" maxLength="6" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={newMember.birth} onChange={e=>setNewMember({...newMember, birth: e.target.value.replace(/[^0-9]/g, '')})} placeholder="생년월일 6자리" /></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">직책</label><select className="p-4 bg-slate-50 rounded-2xl font-black border-2 border-blue-100 outline-none shadow-none text-left text-xs" value={newMember.role} onChange={e=>setNewMember({...newMember, role: e.target.value})}>{STAFF_ROLES.concat(['회원']).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1 text-left uppercase text-xs text-left">Position</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none text-left" value={newMember.position} onChange={e => setNewMember({...newMember, position: e.target.value})}>{POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">실력 점수</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none text-left text-xs" value={String(newMember.level)} onChange={e=>setNewMember({...newMember, level: e.target.value})}>{newMember.gender === '남성' ? [1,2,3,4,5,6].map(v => <option key={v} value={String(v)}>{v}단계</option>) : [7,8,9,10,11,12].map(v => <option key={v} value={String(v)}>{v}단계</option>)}</select></div>
+                                </div>
+                                <div className="flex gap-3"><button onClick={() => setIsAddMemberModalOpen(false)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black shadow-none active:scale-95 transition-all border-none outline-none">취소</button><button onClick={handleAddMember} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl shadow-blue-100 active:scale-95 transition-all">추가</button></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 회원 정보 수정 모달 */}
+                    {editingMember && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[600] flex items-center justify-center p-4" onClick={() => setEditingMember(null)}>
+                            <div className="bg-white rounded-[48px] w-full max-w-lg p-10 shadow-2xl animate-zoom-in text-left text-xs" onClick={e => e.stopPropagation()}>
+                                <h2 className="text-2xl font-black mb-8 text-blue-600 tracking-tighter">회원 정보 수정</h2>
+                                <div className="grid grid-cols-2 gap-4 mb-8 text-left text-xs">
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">이름</label><input type="text" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={editingMember.name} onChange={e=>setEditingMember({...editingMember, name: e.target.value})} /></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">성별</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={editingMember.gender} onChange={e=>setEditingMember({...editingMember, gender: e.target.value})}><option>남성</option><option>여성</option></select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">생년월일</label><input type="text" inputMode="numeric" maxLength="6" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none" value={editingMember.birth || ''} onChange={e=>setEditingMember({...editingMember, birth: e.target.value.replace(/[^0-9]/g, '')})} /></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1 text-blue-600 font-black">직책</label><select className="p-4 bg-slate-50 rounded-2xl font-black border-2 border-blue-100 outline-none shadow-none text-left text-xs" value={editingMember.role || '회원'} onChange={e=>setEditingMember({...editingMember, role: e.target.value})}>{STAFF_ROLES.concat(['회원']).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs">
+                                        <label className="text-[10px] font-black text-slate-400 ml-1 text-left uppercase text-xs text-left">Position</label>
+                                        <select 
+                                            className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none text-left" 
+                                            value={editingMember.position || 'ALL'} 
+                                            onChange={e => setEditingMember({...editingMember, position: e.target.value})}
+                                        >
+                                            {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1 text-left text-xs"><label className="text-[10px] font-black text-slate-400 ml-1">실력 점수</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none text-left text-xs" value={String(editingMember.level)} onChange={e=>setEditingMember({...editingMember, level: e.target.value})}>{editingMember.gender === '남성' ? [1,2,3,4,5,6].map(v => <option key={v} value={String(v)}>{v}단계</option>) : [7,8,9,10,11,12].map(v => <option key={v} value={String(v)}>{v}단계</option>)}</select></div>
+                                    <div className="flex flex-col gap-1 text-left text-xs sm:col-span-2"><label className="text-[10px] font-black text-slate-400 ml-1">커플 대상</label><select className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-blue-100 shadow-none text-left text-xs" value={editingMember.coupleId || ''} onChange={e=>setEditingMember({...editingMember, coupleId: e.target.value})}><option value="">없음</option>{activeMembers.filter(m => m.id !== editingMember.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
+                                </div>
+                                <div className="flex gap-3"><button onClick={() => setEditingMember(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black shadow-none active:scale-95 transition-all border-none outline-none">취소</button><button onClick={handleUpdateMember} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl shadow-blue-100 active:scale-95 transition-all">저장</button></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 탈퇴 처리 모달 */}
+                    {resigningMember && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[600] flex items-center justify-center p-4" onClick={() => setResigningMember(null)}>
+                            <div className="bg-white rounded-[48px] w-full max-w-md p-8 sm:p-10 shadow-2xl animate-zoom-in text-left" onClick={e => e.stopPropagation()}>
+                                <h2 className="text-2xl font-black mb-2 text-red-500 tracking-tighter uppercase">회원 탈퇴</h2>
+                                <p className="text-xs font-bold text-slate-400 mb-8">{resigningMember.name} 님의 탈퇴 정보를 입력해주세요.</p>
+                                
+                                <div className="space-y-4 mb-8">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-black text-slate-400 ml-1 uppercase">탈퇴 일자</label>
+                                        <input type="date" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-red-100 text-sm" value={resignForm.date} onChange={e => setResignForm({...resignForm, date: e.target.value})} />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-black text-slate-400 ml-1 uppercase">탈퇴 사유</label>
+                                        <input type="text" placeholder="사유를 입력해주세요 (예: 이사, 부상 등)" className="p-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-red-100 text-sm" value={resignForm.reason} onChange={e => setResignForm({...resignForm, reason: e.target.value})} />
+                                    </div>
+                                    
+                                    <div className="mt-4 p-4 rounded-2xl bg-red-50 border border-red-100 flex flex-col gap-2">
+                                        <label className="flex items-center gap-2 cursor-pointer w-fit">
+                                            <input type="checkbox" className="w-5 h-5 accent-red-600 rounded" checked={resignForm.isForced} onChange={e => setResignForm({...resignForm, isForced: e.target.checked})} />
+                                            <span className="font-black text-red-600 text-sm">강제 탈퇴 적용</span>
+                                        </label>
+                                        {resignForm.isForced && (
+                                            <p className="text-[10px] text-red-500 font-bold ml-7">⚠️ 강제 탈퇴 시 6개월간 재가입이 불가합니다.</p>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                <div className="flex gap-3">
+                                    <button onClick={() => setResigningMember(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black shadow-none active:scale-95 transition-all text-sm">취소</button>
+                                    <button onClick={handleResignConfirm} className="flex-1 py-5 bg-red-500 text-white rounded-3xl font-black shadow-xl shadow-red-200 active:scale-95 transition-all text-sm">탈퇴 처리</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 월별 상태 관리 모달 */}
+                    {selectedMonthlyMember && (() => {
+                        const memberId = selectedMonthlyMember.id;
+                        const status = monthlyStatuses[memberId]; 
+                        const reason = monthlyReasons[memberId]; 
+                        const membershipInfo = getMembershipStatus(selectedMonthlyMember, targetMonth);
+                        const isGlobalSpecialRest = selectedMonthlyMember.isSpecialRest && targetMonth >= (selectedMonthlyMember.specialRestStartMonth || '0000-00');
+
+                        const isPaid = status === 'paid';
+                        const isRest = status === 'rest';
+                        const isLongTerm = membershipInfo && membershipInfo.active;
+
+                        return (
+                            <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[8000] flex items-center justify-center p-4" onClick={() => setSelectedMonthlyMember(null)}>
+                                <div className="bg-white rounded-[40px] w-full max-w-sm p-8 shadow-2xl animate-zoom-in max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                                    <div className="text-center mb-6">
+                                        <h3 className="text-2xl font-black text-slate-900">{selectedMonthlyMember.name} 님</h3>
+                                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{targetMonth} 납부 상태 관리</p>
+                                    </div>
+
+                                    {/* Step 1: Main Status or Cancellation */}
+                                    {actionStep === 'main' && (
+                                        <div className="animate-fade-in space-y-4 text-left">
+                                            
+                                            {/* Special Rest (Global) */}
+                                            {isGlobalSpecialRest && (
+                                                <div className="bg-indigo-50 p-6 rounded-[24px] border border-indigo-200 text-center mb-6">
+                                                    <div className="w-12 h-12 bg-indigo-500 text-white rounded-full flex items-center justify-center mx-auto mb-3"><Icon.AlertCircle size={24}/></div>
+                                                    <h4 className="font-black text-indigo-700 text-lg mb-1">특별 휴식 적용중</h4>
+                                                    <p className="text-xs text-indigo-600 font-bold mb-1">사유: {selectedMonthlyMember.specialRestReason}</p>
+                                                    <p className="text-xs text-indigo-600 font-bold mb-6">시작월: {selectedMonthlyMember.specialRestStartMonth}</p>
+                                                    <button onClick={() => processActionImmediate('cancel_special_rest')} className="w-full py-4 bg-white border-2 border-indigo-200 text-indigo-600 rounded-2xl font-black active:scale-95 transition-all text-sm shadow-sm hover:bg-indigo-50 flex items-center justify-center gap-2"><Icon.RotateCcw size={16}/>특별 휴식 해제 (복귀)</button>
+                                                    {isLongTerm && (
+                                                        <p className="text-[10px] text-indigo-500 font-bold mt-3">※ 해제 시 휴식한 개월 수만큼 만료일이 자동 연장됩니다.</p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Paid Status */}
+                                            {(!isGlobalSpecialRest && isPaid) && (
+                                                <div className="bg-green-50 p-6 rounded-[24px] border border-green-200 text-center mb-6">
+                                                    <div className="w-12 h-12 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-3"><Icon.CheckCircle size={24}/></div>
+                                                    <h4 className="font-black text-green-700 text-lg mb-1">월납 결제 완료</h4>
+                                                    
+                                                    <div className="flex items-center justify-center gap-2 mb-6 mt-3">
+                                                        <span className="text-xs text-green-700 font-bold">납부일:</span>
+                                                        <input type="date" value={paymentDateInput} onChange={e => setPaymentDateInput(e.target.value)} className="p-1.5 rounded-lg border border-green-200 text-xs font-bold text-green-800 outline-none w-28 bg-white" />
+                                                        <button onClick={() => processActionImmediate('update_payment_date')} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-black shadow-sm active:scale-95 transition-all">수정</button>
+                                                    </div>
+
+                                                    <button onClick={() => processActionImmediate('clear')} className="w-full py-4 bg-white border-2 border-red-200 text-red-500 rounded-2xl font-black active:scale-95 transition-all text-sm shadow-sm hover:bg-red-50 flex items-center justify-center gap-2"><Icon.RotateCcw size={16}/>납부 취소 (초기화)</button>
+                                                </div>
+                                            )}
+
+                                            {/* Rest Status (Legacy/Regular) */}
+                                            {(!isGlobalSpecialRest && isRest) && (
+                                                <div className={`${reason ? 'bg-indigo-50 border-indigo-200' : 'bg-yellow-50 border-yellow-200'} p-6 rounded-[24px] border text-center mb-6`}>
+                                                    <div className={`w-12 h-12 ${reason ? 'bg-indigo-500' : 'bg-yellow-400'} text-white rounded-full flex items-center justify-center mx-auto mb-3`}>
+                                                        {reason ? <Icon.AlertCircle size={24}/> : <Icon.Coffee size={24}/>}
+                                                    </div>
+                                                    <h4 className={`font-black ${reason ? 'text-indigo-700' : 'text-yellow-700'} text-lg mb-1`}>{reason ? '특별 휴식' : '휴식'} 적용됨</h4>
+                                                    
+                                                    {reason && <p className="text-xs text-indigo-600 font-bold mb-1 mt-2">사유: {reason}</p>}
+                                                    
+                                                    {!reason && (
+                                                        <div className="flex items-center justify-center gap-2 mb-2 mt-3">
+                                                            <span className="text-xs text-yellow-700 font-bold">납부일:</span>
+                                                            <input type="date" value={paymentDateInput} onChange={e => setPaymentDateInput(e.target.value)} className="p-1.5 rounded-lg border border-yellow-200 text-xs font-bold text-yellow-800 outline-none w-28 bg-white" />
+                                                            <button onClick={() => processActionImmediate('update_payment_date')} className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg text-xs font-black shadow-sm active:scale-95 transition-all">수정</button>
+                                                        </div>
+                                                    )}
+
+                                                    {isLongTerm && (
+                                                        <p className={`text-xs ${reason ? 'text-indigo-600' : 'text-yellow-600'} font-bold mt-4 mb-2`}>
+                                                            {reason ? '※ 특별휴식 (잔여 휴식 횟수 차감 없음)' : '※ 잔여 휴식 횟수 1회 차감됨'}
+                                                        </p>
+                                                    )}
+                                                    <div className="mt-6">
+                                                        <button onClick={() => processActionImmediate('cancel_rest')} className="w-full py-4 bg-white border-2 border-red-200 text-red-500 rounded-2xl font-black active:scale-95 transition-all text-sm shadow-sm hover:bg-red-50 flex items-center justify-center gap-2"><Icon.RotateCcw size={16}/>{reason ? '특별 ' : ''}휴식 취소 (복귀)</button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Long-term Membership Active Edit Form */}
+                                            {(!isGlobalSpecialRest && isLongTerm && !isPaid && !isRest) && (
+                                                <div className="bg-blue-50 p-6 rounded-[24px] border border-blue-200 text-center mb-6">
+                                                    <div className="w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-3"><Icon.Bookmark size={24}/></div>
+                                                    <h4 className="font-black text-blue-700 text-lg mb-1">{membershipInfo.type} 멤버십 적용중</h4>
+                                                    <p className="text-xs text-blue-600 font-bold mb-4">잔여 휴식: {membershipInfo.remainingRest}회</p>
+                                                    
+                                                    <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-blue-100 mb-6 text-left">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">결제 / 납부일</label>
+                                                            <input type="date" value={paymentDateInput} onChange={e => setPaymentDateInput(e.target.value)} className="p-2.5 rounded-lg border border-slate-200 text-xs font-bold focus:border-blue-500 outline-none w-full" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">만료일 (수동 변경 가능)</label>
+                                                            <input type="date" value={manualEndDate} onChange={e => setManualEndDate(e.target.value)} className="p-2.5 rounded-lg border border-slate-200 text-xs font-bold focus:border-blue-500 outline-none w-full" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">기사용 휴식 횟수</label>
+                                                            <div className="flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50">
+                                                                <span className="text-xs font-bold text-slate-600 pl-1">
+                                                                    사용: <span className="text-blue-600 font-black">{tempRestCount}</span>회 <span className="opacity-50 mx-1">|</span> 잔여: {(selectedMonthlyMember.membershipType === 'half_year' ? 3 : 6) - tempRestCount}회
+                                                                </span>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => setTempRestCount(Math.max(0, tempRestCount - 1))} className="w-7 h-7 rounded bg-white border border-slate-200 text-slate-600 font-black hover:bg-slate-100">-</button>
+                                                                    <button onClick={() => setTempRestCount(tempRestCount + 1)} className="w-7 h-7 rounded bg-white border border-slate-200 text-slate-600 font-black hover:bg-slate-100">+</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button onClick={() => processActionImmediate('update_longterm_info')} className="w-full mt-2 py-3 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-1.5"><Icon.Save size={14}/> 변경사항 저장</button>
+                                                    </div>
+                                                    
+                                                    <div className="space-y-3">
+                                                        <button onClick={() => handleActionClick('rest')} className="w-full py-4 bg-white border-2 border-yellow-200 text-yellow-600 rounded-2xl font-black active:scale-95 transition-all text-sm shadow-sm hover:bg-yellow-50 flex justify-center gap-2 items-center"><Icon.Coffee size={18}/> 이번 달 휴식 사용</button>
+                                                        <button onClick={() => handleActionClick('special_rest')} className="w-full py-4 bg-white border-2 border-indigo-200 text-indigo-600 rounded-2xl font-black active:scale-95 transition-all text-sm shadow-sm hover:bg-indigo-50 flex justify-center gap-2 items-center"><Icon.AlertCircle size={18}/> 특별 휴식 처리</button>
+                                                        <div className="pt-4 mt-2 border-t border-blue-200/50">
+                                                            <button onClick={() => showConfirm("멤버십 강제 종료", "정말로 멤버십을 강제 종료하시겠습니까?", () => processActionImmediate('end_membership'))} className="w-full py-3 text-red-400 font-bold text-xs hover:text-red-600 transition-all underline underline-offset-4">멤버십 강제 종료</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Unpaid */}
+                                            {(!isGlobalSpecialRest && !isLongTerm && !isPaid && !isRest) && (
+                                                <div className="space-y-3">
+                                                    <button onClick={() => handleActionClick('monthly_paid')} className="w-full py-4 bg-white border-2 border-green-200 text-green-700 rounded-2xl font-black shadow-sm active:scale-95 transition-all hover:bg-green-50 flex items-center justify-center gap-2 text-sm">
+                                                        <Icon.CheckCircle size={18}/> 월납 결제
+                                                    </button>
+                                                    <button onClick={() => handleActionClick('start_half')} className="w-full py-4 bg-white border-2 border-blue-200 text-blue-700 rounded-2xl font-black shadow-sm active:scale-95 transition-all hover:bg-blue-50 flex items-center justify-center gap-2 text-sm">
+                                                        <Icon.Calendar size={18}/> 6개월 (반년납) 시작
+                                                    </button>
+                                                    <button onClick={() => handleActionClick('start_full')} className="w-full py-4 bg-white border-2 border-purple-200 text-purple-700 rounded-2xl font-black shadow-sm active:scale-95 transition-all hover:bg-purple-50 flex items-center justify-center gap-2 text-sm">
+                                                        <Icon.Calendar size={18}/> 12개월 (1년납) 시작
+                                                    </button>
+                                                    <div className="h-px bg-slate-100 my-1"></div>
+                                                    <button onClick={() => handleActionClick('rest')} className="w-full py-4 bg-white border-2 border-yellow-200 text-yellow-600 rounded-2xl font-black shadow-sm active:scale-95 transition-all hover:bg-yellow-50 flex items-center justify-center gap-2 text-sm">
+                                                        <Icon.Coffee size={18}/> 이번 달 휴식비 결제
+                                                    </button>
+                                                    <button onClick={() => handleActionClick('special_rest')} className="w-full py-4 bg-white border-2 border-indigo-200 text-indigo-600 rounded-2xl font-black shadow-sm active:scale-95 transition-all hover:bg-indigo-50 flex items-center justify-center gap-2 text-sm">
+                                                        <Icon.AlertCircle size={18}/> 특별 휴식 처리
+                                                    </button>
+                                                </div>
+                                            )}
+                                            
+                                            <div className="mt-4">
+                                                <button onClick={() => setSelectedMonthlyMember(null)} className="w-full py-4 text-slate-400 font-bold text-sm bg-slate-50 rounded-2xl hover:bg-slate-100 transition-all active:scale-95">닫기</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Step 2: Form */}
+                                    {actionStep === 'form' && (
+                                        <div className="animate-fade-in text-left">
+                                            <div className="mb-6 pb-4 border-b border-slate-100 text-center">
+                                                <h4 className="text-lg font-black text-slate-800">
+                                                    {selectedAction === 'monthly_paid' ? '월납 결제 진행' : 
+                                                     selectedAction === 'start_half' ? '반년납 시작 설정' : 
+                                                     selectedAction === 'start_full' ? '1년납 시작 설정' : 
+                                                     selectedAction === 'rest' ? '휴식 처리' : '특별 휴식 설정'}
+                                                </h4>
+                                            </div>
+
+                                            {selectedAction !== 'special_rest' && (
+                                                <div className="mb-6 flex flex-col gap-2">
+                                                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">{selectedAction === 'rest' ? '휴식비 결제 / 납부 일자' : '결제 / 납부 일자'}</label>
+                                                    <input 
+                                                        type="date" 
+                                                        className="p-4 bg-slate-50 rounded-2xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-300 w-full shadow-inner"
+                                                        value={paymentDateInput}
+                                                        onChange={(e) => setPaymentDateInput(e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {(selectedAction === 'start_half' || selectedAction === 'start_full') && (
+                                                <div className="mb-6 flex flex-col gap-2">
+                                                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">자동 계산된 만료일</label>
+                                                    <input 
+                                                        type="date" 
+                                                        className="p-4 bg-blue-50 rounded-2xl font-black text-blue-700 outline-none border-2 border-blue-200 w-full"
+                                                        value={manualEndDate}
+                                                        onChange={(e) => setManualEndDate(e.target.value)}
+                                                    />
+                                                    <p className="text-[10px] text-slate-400 ml-1 font-bold">※ 현재 달 기준 {selectedAction === 'start_half' ? '6개월' : '12개월'} 뒤 마지막 날짜로 세팅됩니다. (수정 가능)</p>
+                                                </div>
+                                            )}
+
+                                            {selectedAction === 'special_rest' && (
+                                                <div className="mb-6 flex flex-col gap-2">
+                                                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">특별 휴식 사유</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="예: 육아, 부상 등"
+                                                        className="p-4 bg-slate-50 rounded-2xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-indigo-300 w-full shadow-inner"
+                                                        value={specialRestReason}
+                                                        onChange={(e) => setSpecialRestReason(e.target.value)}
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {(selectedAction === 'rest' && isLongTerm) && (
+                                                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-2xl text-center">
+                                                    <p className="text-xs font-bold text-yellow-700 mb-1">만료일이 1개월 연장되고 잔여 휴식이 차감됩니다.</p>
+                                                    <p className="text-sm font-black text-yellow-800">잔여 휴식: {membershipInfo.remainingRest}회 → <span className="text-red-500">{Math.max(0, membershipInfo.remainingRest - 1)}회</span></p>
+                                                </div>
+                                            )}
+
+                                            {(selectedAction === 'special_rest' && isLongTerm) && (
+                                                <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-center">
+                                                    <p className="text-xs font-bold text-indigo-700 mb-1">만료일이 1개월 연장되며, <b className="text-indigo-900">잔여 휴식은 차감되지 않습니다.</b></p>
+                                                    <p className="text-sm font-black text-indigo-800">잔여 휴식: {membershipInfo.remainingRest}회 (유지)</p>
+                                                </div>
+                                            )}
+
+                                            <div className="flex gap-3">
+                                                <button onClick={() => setActionStep('main')} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black shadow-none active:scale-95 transition-all outline-none">이전</button>
+                                                <button 
+                                                    onClick={() => processActionImmediate(selectedAction)} 
+                                                    disabled={selectedAction === 'special_rest' && !specialRestReason.trim()}
+                                                    className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-xl shadow-blue-200 active:scale-95 transition-all outline-none disabled:opacity-50"
+                                                >
+                                                    확 인
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* 명단 확인 및 캡쳐 모달 */}
+                    {listModalData && (
+                        <div className={`fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[8000] flex justify-center p-4 ${isCapturing ? 'items-start overflow-y-auto py-10' : 'items-center'}`} onClick={() => { if(!isCapturing) { setListModalData(null); setCapturedImage(null); } }}>
+                            <div 
+                                className={`bg-white w-full max-w-sm shadow-2xl flex flex-col ${isCapturing || capturedImage ? 'rounded-[40px] h-auto' : 'rounded-[40px] overflow-hidden max-h-[80vh] animate-zoom-in'}`} 
+                                onClick={e => e.stopPropagation()}
+                            >
+                                {capturedImage ? (
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-slate-100 p-4 rounded-t-[40px] w-full text-center border-b border-slate-200">
+                                            <p className="text-sm font-black text-slate-800">📸 이미지 생성 완료!</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">모바일은 아래 이미지를 <b>길게 눌러 저장</b>하세요.</p>
+                                        </div>
+                                        <div className="p-4 w-full overflow-y-auto max-h-[60vh] custom-scrollbar bg-slate-50 flex justify-center">
+                                            <img src={capturedImage} alt="Captured List" className="w-full rounded-2xl shadow-sm border border-slate-200" />
+                                        </div>
+                                        <div className="p-4 bg-white w-full border-t border-slate-100 flex gap-2 rounded-b-[40px]">
+                                            <button onClick={() => setCapturedImage(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-2xl font-black shadow-sm active:scale-95 transition-all text-xs">다시 보기</button>
+                                            <button onClick={handleDownloadImage} className="flex-[2] py-3 bg-blue-600 text-white rounded-2xl font-black shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5"><Icon.Save size={14}/> PC 다운로드</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div id="capture-area" className="bg-white flex flex-col w-full rounded-[40px] overflow-hidden">
+                                            <div className="p-6 bg-slate-900 text-white text-center">
+                                                <h3 className="text-xl font-black mb-1">{listModalData.title}</h3>
+                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total {listModalData.count} Members</p>
+                                            </div>
+                                            
+                                            <div className={`p-6 bg-white flex-1 ${isCapturing ? '' : 'overflow-y-auto custom-scrollbar'}`}>
+                                                <div className="flex flex-col space-y-1">
+                                                    {listModalData.items.map((item, idx) => (
+                                                        <div key={item.id || idx} className="flex justify-between items-center py-2.5 border-b border-slate-100 last:border-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-black text-slate-800">{item.name}</span>
+                                                                {item.tag && (
+                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold border border-slate-200">
+                                                                        {item.tag}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {item.details && (
+                                                                <span className="text-[10px] text-slate-500 font-bold text-right">
+                                                                    {item.details}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {isCapturing && (
+                                                    <div className="mt-8 text-center text-slate-300 font-black text-[9px] uppercase tracking-widest">
+                                                        OTP FC System
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {!isCapturing && (
+                                            <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col gap-2 rounded-b-[40px]">
+                                                <button 
+                                                    onClick={handleCaptureImage} 
+                                                    className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-md active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
+                                                >
+                                                    <Icon.Save size={16}/> 이 화면을 이미지로 저장
+                                                </button>
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        onClick={() => { setListModalData(null); setCapturedImage(null); }} 
+                                                        className="flex-1 py-3 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black shadow-sm active:scale-95 transition-all text-xs"
+                                                    >
+                                                        닫기
+                                                    </button>
+                                                    <button 
+                                                        onClick={handleCopyFromModal} 
+                                                        className="flex-1 py-3 bg-slate-800 text-white rounded-2xl font-black shadow-md active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5"
+                                                    >
+                                                        <Icon.FileSpreadsheet size={14}/> 텍스트 복사
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Alert Modal */}
+                    {alertModal.show && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4" onClick={() => setAlertModal(p => ({...p, show: false}))}>
+                            <div className="bg-white rounded-[48px] w-full max-w-sm p-10 shadow-2xl text-center animate-zoom-in" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-2xl font-black mb-4 tracking-tighter text-center uppercase text-slate-900 text-center">{alertModal.title}</h3>
+                                <p className="text-slate-500 font-bold mb-10 whitespace-pre-wrap leading-relaxed text-sm text-center">{alertModal.content}</p>
+                                <div className="flex gap-3 text-center">
+                                    {alertModal.type === 'confirm' && <button onClick={() => setAlertModal(p => ({...p, show: false}))} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black active:scale-95 transition-all shadow-none border-none outline-none uppercase text-xs text-center">No</button>}
+                                    <button onClick={() => { if (alertModal.onConfirm) alertModal.onConfirm(); setAlertModal(p => ({...p, show: false})); }} className={`flex-1 py-5 text-white rounded-3xl font-black shadow-xl active:scale-95 transition-all ${alertModal.type === 'confirm' ? 'bg-blue-600 shadow-blue-100' : 'bg-slate-900 shadow-slate-200'} uppercase text-xs text-center`}>Yes</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
