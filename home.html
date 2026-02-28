@@ -12,96 +12,120 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
-        .system-card { transition: all 0.2s ease; }
-        .system-card:active { transform: scale(0.97); }
+        .system-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .system-card:active { transform: scale(0.96); }
+        
+        /* 암호 입력 애니메이션 */
+        .shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden text-gray-800">
 
-    <!-- 상단 헤더 -->
-    <header class="bg-gray-900 text-white p-5 shadow-lg z-10 flex-shrink-0 border-b border-gray-800">
-        <h1 class="text-xl font-black text-center tracking-tighter italic" id="header-title">OTP FC HUB</h1>
+    <!-- 상단 헤더 (높이 축소) -->
+    <header class="bg-gray-900 text-white p-3 shadow-lg z-10 flex-shrink-0 border-b border-gray-800">
+        <h1 class="text-lg font-black text-center tracking-tighter italic" id="header-title">OTP FC HUB</h1>
     </header>
 
     <!-- 메인 컨텐츠 영역 -->
-    <main class="flex-1 overflow-y-auto no-scrollbar relative w-full max-w-lg mx-auto bg-gray-50" id="main-content">
+    <main class="flex-1 overflow-hidden relative w-full max-w-lg mx-auto bg-gray-50 flex flex-col" id="main-content">
         
         <!-- ================= [홈 탭 뷰] ================= -->
-        <div id="view-home" class="p-6 pb-28 hidden flex flex-col gap-5">
-            <div class="mb-2">
-                <h2 class="text-2xl font-bold text-gray-900">반갑습니다! 👋</h2>
-                <p class="text-sm text-gray-500 font-medium">오늘의 팀 관리 시스템을 선택하세요.</p>
+        <div id="view-home" class="p-4 h-full hidden flex flex-col justify-center gap-3">
+            <div class="mb-1 text-center">
+                <h2 class="text-xl font-bold text-gray-900">반갑습니다! 👋</h2>
+                <p class="text-xs text-gray-400 font-medium italic">OTP FC Management System</p>
             </div>
             
-            <!-- 링크 버튼들 -->
-            <div id="link-buttons-container" class="grid grid-cols-1 gap-4">
+            <div id="link-buttons-container" class="flex flex-col gap-3">
                 <!-- JS에서 동적 생성됨 -->
             </div>
         </div>
 
+        <!-- ================= [비밀번호 확인 뷰] ================= -->
+        <div id="view-auth" class="p-6 h-full hidden flex flex-col items-center justify-center">
+            <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 w-full max-w-sm text-center">
+                <div class="w-12 h-12 bg-gray-100 text-gray-900 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                </div>
+                <h2 class="text-lg font-bold mb-1">관리자 인증</h2>
+                <p class="text-xs text-gray-400 mb-5">PIN 4자리를 입력하세요.</p>
+                
+                <div class="flex flex-col gap-3" id="auth-form">
+                    <input type="password" id="admin-pin" maxlength="4" placeholder="••••" class="text-center text-xl tracking-[1em] w-full bg-gray-50 border border-gray-200 rounded-xl py-3 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all">
+                    <button onclick="checkPin()" class="w-full bg-gray-900 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 transition-all text-sm">확인</button>
+                    <button onclick="switchTab('home')" class="text-gray-400 text-xs font-medium">홈으로 돌아가기</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ================= [설정 탭 뷰] ================= -->
-        <div id="view-settings" class="p-6 pb-28 hidden flex flex-col gap-6">
-            <div class="mb-2">
-                <h2 class="text-xl font-bold text-gray-900">시스템 링크 설정</h2>
-                <p class="text-sm text-gray-500">연결할 Github Pages 주소를 관리합니다.</p>
+        <div id="view-settings" class="p-4 h-full hidden flex flex-col overflow-y-auto no-scrollbar">
+            <div class="flex justify-between items-end mb-4 flex-shrink-0">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">시스템 설정</h2>
+                    <p class="text-xs text-gray-500">각 시스템 링크를 관리합니다.</p>
+                </div>
+                <button onclick="lockAdmin()" class="bg-gray-200 text-gray-600 px-3 py-1 rounded-lg text-[10px] font-bold">로그아웃</button>
             </div>
 
             <!-- 새 링크 추가 폼 -->
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">새 시스템 추가</h3>
-                <div class="flex flex-col gap-3">
-                    <input type="text" id="new-name" placeholder="시스템 이름" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all">
-                    <input type="url" id="new-url" placeholder="URL 주소 (https://...)" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all">
-                    <button onclick="addNewLink()" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-4 rounded-xl transition-all mt-1 shadow-md">
-                        시스템 등록하기
-                    </button>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-4 flex-shrink-0">
+                <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">새 시스템 추가</h3>
+                <div class="flex flex-col gap-2">
+                    <input type="text" id="new-name" placeholder="이름" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-gray-900">
+                    <input type="url" id="new-url" placeholder="https://..." class="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[10px] focus:outline-none focus:ring-2 focus:ring-gray-900 font-mono">
+                    <button onclick="addNewLink()" class="w-full bg-gray-900 text-white font-bold py-2 rounded-lg text-xs transition-all mt-1">등록</button>
                 </div>
             </div>
 
-            <!-- 등록된 링크 목록 -->
-            <div>
-                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 ml-1">등록된 시스템 목록</h3>
-                <div id="registered-links-container" class="flex flex-col gap-3">
-                    <!-- JS에서 동적 생성됨 -->
-                </div>
+            <div id="registered-links-container" class="flex flex-col gap-2 pb-20">
+                <!-- JS에서 동적 생성됨 -->
             </div>
         </div>
 
     </main>
 
-    <!-- 하단 네비게이션 바 -->
-    <nav class="bg-white/80 backdrop-blur-md border-t border-gray-200 fixed bottom-0 w-full max-w-lg left-1/2 transform -translate-x-1/2 z-20 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-        <div class="flex justify-around items-center h-20 px-6">
-            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+    <!-- 하단 네비게이션 바 (높이 축소) -->
+    <nav class="bg-white border-t border-gray-100 fixed bottom-0 w-full max-w-lg left-1/2 transform -translate-x-1/2 z-20 pb-safe shadow-lg">
+        <div class="flex justify-around items-center h-14 px-10">
+            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
-                <span class="text-[10px] font-black uppercase tracking-tighter">홈</span>
+                <span class="text-[9px] font-black uppercase">홈</span>
             </button>
-            <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                <span class="text-[10px] font-black uppercase tracking-tighter text-gray-400">설정</span>
+                <span class="text-[9px] font-black uppercase text-gray-400">관리</span>
             </button>
         </div>
     </nav>
 
     <!-- 토스트 알림 -->
-    <div id="toast" class="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-8 py-3 rounded-full shadow-2xl text-xs font-bold transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50">
+    <div id="toast" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-2 rounded-full shadow-2xl text-[10px] font-bold transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50">
         메세지
     </div>
 
     <script>
-        // 고유 아이콘 SVG 정의
+        const PIN = "2295";
+        let isAdminAuthenticated = false;
+
         const icons = {
-            attendance: `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>`,
-            roster: `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`,
-            match: `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
-            default: `<svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`
+            attendance: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>`,
+            roster: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`,
+            match: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
+            default: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`
         };
 
-        // 초기 기본 링크 데이터 (아이콘/컬러 메타데이터 포함)
         const defaultLinks = [
             { id: 'att', name: '출결 관리 시스템', url: '', color: 'emerald', icon: 'attendance' },
             { id: 'ros', name: '명단 및 회비 관리', url: '', color: 'blue', icon: 'roster' },
@@ -111,7 +135,7 @@
         let links = [];
 
         function initApp() {
-            const savedLinks = localStorage.getItem('otpfc_v2_links');
+            const savedLinks = localStorage.getItem('otpfc_master_links');
             if (savedLinks) {
                 try {
                     links = JSON.parse(savedLinks);
@@ -126,12 +150,20 @@
         }
 
         function saveLinks() {
-            localStorage.setItem('otpfc_v2_links', JSON.stringify(links));
+            localStorage.setItem('otpfc_master_links', JSON.stringify(links));
         }
 
         function switchTab(tab) {
-            document.getElementById('view-home').classList.toggle('hidden', tab !== 'home');
-            document.getElementById('view-settings').classList.toggle('hidden', tab !== 'settings');
+            if (tab === 'settings' && !isAdminAuthenticated) {
+                showAuthView();
+                return;
+            }
+
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-settings').classList.add('hidden');
+            document.getElementById('view-auth').classList.add('hidden');
+            
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
             
             const navHome = document.getElementById('nav-home');
             const navSettings = document.getElementById('nav-settings');
@@ -142,13 +174,42 @@
                 navSettings.classList.remove('bg-gray-100', 'text-gray-900');
                 navSettings.classList.add('text-gray-400');
                 renderHome();
-            } else {
+            } else if (tab === 'settings') {
                 navSettings.classList.add('bg-gray-100', 'text-gray-900');
                 navSettings.classList.remove('text-gray-400');
                 navHome.classList.remove('bg-gray-100', 'text-gray-900');
                 navHome.classList.add('text-gray-400');
                 renderSettings();
             }
+        }
+
+        function showAuthView() {
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-settings').classList.add('hidden');
+            document.getElementById('view-auth').classList.remove('hidden');
+            document.getElementById('admin-pin').value = "";
+            document.getElementById('admin-pin').focus();
+        }
+
+        function checkPin() {
+            const input = document.getElementById('admin-pin');
+            const form = document.getElementById('auth-form');
+            if (input.value === PIN) {
+                isAdminAuthenticated = true;
+                switchTab('settings');
+                showToast('인증 성공');
+            } else {
+                form.classList.add('shake');
+                showToast('PIN이 일치하지 않습니다.');
+                setTimeout(() => form.classList.remove('shake'), 400);
+                input.value = "";
+            }
+        }
+
+        function lockAdmin() {
+            isAdminAuthenticated = false;
+            switchTab('home');
+            showToast('로그아웃 되었습니다.');
         }
 
         function renderHome() {
@@ -168,7 +229,7 @@
                 const iconSvg = icons[link.icon] || icons.default;
                 
                 const btn = document.createElement('button');
-                btn.className = `system-card w-full flex items-center p-6 rounded-3xl border-b-4 transition-all shadow-sm ${
+                btn.className = `system-card w-full flex items-center p-4 rounded-2xl border-b-2 transition-all shadow-sm ${
                     isUrlEmpty ? 'bg-white border-gray-100 opacity-60' : `${style.bg} ${style.border} active:shadow-inner`
                 }`;
                 
@@ -181,13 +242,13 @@
                 };
 
                 btn.innerHTML = `
-                    <div class="${isUrlEmpty ? 'bg-gray-100 text-gray-400' : `${style.iconBg} text-white shadow-lg shadow-${link.color}-200`} w-16 h-16 rounded-2xl flex items-center justify-center mr-5 flex-shrink-0">
+                    <div class="${isUrlEmpty ? 'bg-gray-100 text-gray-400' : `${style.iconBg} text-white shadow-md`} w-12 h-12 rounded-xl flex items-center justify-center mr-4 flex-shrink-0">
                         ${iconSvg}
                     </div>
                     <div class="text-left">
-                        <div class="font-black ${isUrlEmpty ? 'text-gray-400' : style.text} text-xl tracking-tighter">${link.name}</div>
-                        <div class="text-[11px] font-bold ${isUrlEmpty ? 'text-gray-300' : style.sub} mt-1 uppercase tracking-widest">
-                            ${isUrlEmpty ? 'URL Not Ready' : 'Access System →'}
+                        <div class="font-bold ${isUrlEmpty ? 'text-gray-400' : style.text} text-base tracking-tighter">${link.name}</div>
+                        <div class="text-[9px] font-bold ${isUrlEmpty ? 'text-gray-300' : style.sub} mt-0.5 uppercase tracking-widest">
+                            ${isUrlEmpty ? 'URL Not Ready' : 'System Access →'}
                         </div>
                     </div>
                 `;
@@ -201,27 +262,29 @@
 
             links.forEach(link => {
                 const item = document.createElement('div');
-                item.className = 'bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3';
+                item.className = 'bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-2';
                 
                 item.innerHTML = `
                     <div class="flex justify-between items-center">
-                        <span class="text-xs font-black uppercase tracking-widest text-gray-400">${link.name}</span>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">${link.name}</span>
                         <button onclick="deleteLink('${link.id}')" class="text-rose-500 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                         </button>
                     </div>
-                    <input type="text" value="${link.name}" oninput="updateLink('${link.id}', 'name', this.value)" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gray-900" placeholder="시스템 이름">
-                    <input type="url" value="${link.url}" oninput="updateLink('${link.id}', 'url', this.value)" class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-gray-900 font-mono text-xs" placeholder="https://github.io/...">
+                    <input type="text" value="${link.name}" oninput="updateLink('${link.id}', 'name', this.value)" class="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-gray-900" placeholder="시스템 이름">
+                    <input type="url" value="${link.url}" oninput="updateLink('${link.id}', 'url', this.value)" class="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-[10px] focus:outline-none focus:border-gray-900 font-mono" placeholder="https://...">
                 `;
                 container.appendChild(item);
             });
         }
 
         function addNewLink() {
-            const name = document.getElementById('new-name').value.trim();
-            const url = document.getElementById('new-url').value.trim();
+            const nameInput = document.getElementById('new-name');
+            const urlInput = document.getElementById('new-url');
+            const name = nameInput.value.trim();
+            const url = urlInput.value.trim();
             if (!name) return showToast('이름을 입력하세요.');
 
             links.push({
@@ -233,10 +296,10 @@
             });
 
             saveLinks();
-            document.getElementById('new-name').value = '';
-            document.getElementById('new-url').value = '';
+            nameInput.value = '';
+            urlInput.value = '';
             renderSettings();
-            showToast('새 시스템이 추가되었습니다.');
+            showToast('추가 완료');
         }
 
         function updateLink(id, field, value) {
@@ -251,7 +314,7 @@
             links = links.filter(l => l.id !== id);
             saveLinks();
             renderSettings();
-            showToast('삭제되었습니다.');
+            showToast('삭제 완료');
         }
 
         function formatUrl(url) {
