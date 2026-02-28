@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>OTP FC Team Maker</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase SDK (Compat Version 11.6.1) -->
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
+    
+    <!-- html2canvas for capturing -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <style>
+        /* 기본: 이사만루체(Esamanru) 웹폰트 적용 */
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicMedium.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicBold.woff') format('woff');
+            font-weight: 700;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicLight.woff') format('woff');
+            font-weight: 300;
+            font-style: normal;
+        }
+
+        :root {
+            --main-font: 'Esamanru', sans-serif;
+            --bold-font: 'Esamanru', sans-serif;
+        }
+
+        body { 
+            font-family: var(--main-font); 
+            background-color: #f1f5f9;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            overscroll-behavior-y: none;
+        }
+        
+        .font-black { font-weight: 700; }
+        .font-bold { font-weight: 500; }
+
+        /* 팀 카드 호버 애니메이션 제거 */
+        .team-card { transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        button:active { transform: scale(0.96); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .modal-backdrop {
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            animation: backdropFadeIn 0.2s ease-out;
+        }
+        @keyframes backdropFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* 드래그 중인 아이템 스타일 */
+        .dragging {
+            opacity: 0.4;
+            border: 2px dashed #3b82f6 !important;
+            background-color: #eff6ff !important;
+            transform: scale(0.95);
+            position: relative;
+            filter: grayscale(100%);
+        }
+        .dragging::after {
+            content: "이동 중...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            font-weight: 700;
+            color: #2563eb;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px;
+            border-radius: 9999px;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: nowrap;
+            z-index: 20;
+        }
+
+        /* 모바일 드래그 고스트 카드 */
+        .ghost-card {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            opacity: 0.95;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            width: 280px;
+            will-change: transform, left, top; 
+        }
+        
+        .dropzone-active {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+            transform: scale(1.02);
+        }
+
+        .touch-action-pan-y { touch-action: pan-y; }
+        .touch-action-none { touch-action: none; }
+    </style>
+</head>
+<body>
+    <div id="loading-screen" class="fixed inset-0 bg-white flex flex-col items-center justify-center z-[9999]">
+        <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="mt-4 font-bold text-slate-500 italic">서버 연결 중...</p>
+    </div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // Firebase Initialization
+        const firebaseConfig = {
+            apiKey: "AIzaSyCAcQzliuWJTB8vPm9gb0vsyR8pIAx7YTw",
+            authDomain: "otp-fc-check.firebaseapp.com",
+            projectId: "otp-fc-check",
+            storageBucket: "otp-fc-check.firebasestorage.app",
+            messagingSenderId: "907414776392",
+            appId: "1:907414776392:web:0a29a660bb956e5a40467d"
+        };
+
+        if (firebase.apps.length) {
+            // Already initialized
+        } else {
+            firebase.initializeApp(firebaseConfig);
+        }
+        
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const APP_ID = 'otp-fc-attendance';
+        const getCol = (name) => db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection(name);
+        const getTeamDraftsCol = () => db.collection('artifacts').doc('otp-fc-attendance').collection('public').doc('data').collection('team_drafts');
+
+        // --- Helper Functions ---
+        // 레벨별 점수 격차 확대 (밸런싱 강화)
+        const getLevelPoints = (level) => {
+            const l = parseInt(level);
+            const n = l > 6 ? l - 6 : l; 
+            switch(n) {
+                case 1: return 15;   // 1티어 (압도적 가중치)
+                case 2: return 11;   // 2티어
+                case 3: return 8;    // 3티어
+                case 4: return 5;
+                case 5: return 3;
+                case 6: return 1;
+                default: return 1;
+            }
+        };
+
+        const getLevelColor = (level) => {
+            const l = parseInt(level);
+            const n = l > 6 ? l - 6 : l; 
+            switch(n) {
+                case 1: return 'bg-rose-500 text-white';
+                case 2: return 'bg-orange-500 text-white';
+                case 3: return 'bg-amber-400 text-slate-800';
+                case 4: return 'bg-emerald-500 text-white';
+                case 5: return 'bg-blue-500 text-white';
+                case 6: return 'bg-violet-500 text-white';
+                default: return 'bg-slate-400 text-white';
+            }
+        };
+
+        const getTeamName = (index) => String.fromCharCode(65 + index);
+        
+        // 1팀~6팀 고유 색상 적용 (핑크, 하늘, 형광녹색, 노란색, 파란색, 빨간색)
+        const getTeamBadgeColor = (index) => ['bg-pink-500 text-white', 'bg-sky-400 text-white', 'bg-lime-400 text-slate-800', 'bg-yellow-400 text-slate-800', 'bg-blue-600 text-white', 'bg-red-500 text-white'][index] || 'bg-slate-500 text-white';
+        const getTeamColorClass = (index) => ['bg-pink-50 border-pink-200 text-pink-900', 'bg-sky-50 border-sky-200 text-sky-900', 'bg-lime-50 border-lime-200 text-lime-900', 'bg-yellow-50 border-yellow-200 text-yellow-900', 'bg-blue-50 border-blue-200 text-blue-900', 'bg-red-50 border-red-200 text-red-900'][index] || 'bg-slate-50 border-slate-200 text-slate-900';
+        const getTeamNumberColor = (index) => ['text-pink-500', 'text-sky-400', 'text-lime-500', 'text-yellow-400', 'text-blue-600', 'text-red-500'][index] || 'text-slate-300';
+        
+        const shuffleArray = (array) => {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        // Icons
+        const Icon = {
+            Refresh: ({size=20, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+            Heart: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>,
+            Bookmark: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>,
+            Trash: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+            Camera: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+            Download: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+            Shield: ({size=16, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+            Clock: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            AlertCircle: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Info: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+            Settings: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+            Upload: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+            Check: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
+            Folder: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+            RotateCcw: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        };
+
+        function App() {
+            const [members, setMembers] = useState([]);
+            const [sessionData, setSessionData] = useState([]);
+            // savedDrafts: 임시 저장 목록, confirmedHistory: 확정된 기록 목록
+            const [savedDrafts, setSavedDrafts] = useState([]);
+            const [confirmedHistory, setConfirmedHistory] = useState([]);
+            
+            const [meetingDate, setMeetingDate] = useState('');
+            const [meetingTime, setMeetingTime] = useState({ start: '', end: '' }); 
+            const [syncManagerName, setSyncManagerName] = useState('');
+            const [maxMemberLimit, setMaxMemberLimit] = useState(18); // Default limit
+
+            const [teamingSettings, setTeamingSettings] = useState({ teamCount: 3, keepCouples: true });
+            const [teams, setTeams] = useState([]);
+            const [isConfirmed, setIsConfirmed] = useState(false);
+            const [activeTab, setActiveTab] = useState('generator');
+            const [storageTab, setStorageTab] = useState('drafts'); // 'drafts' or 'history'
+            const [isCapturing, setIsCapturing] = useState(false);
+            const [user, setUser] = useState(null);
+            
+            const [customFontName, setCustomFontName] = useState('Esamanru'); 
+            const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+            // Drag & Drop State
+            const [draggedItem, setDraggedItem] = useState(null);
+            const [dragOverItem, setDragOverItem] = useState(null);
+            
+            // Mobile Drag State
+            const [mobileGhost, setMobileGhost] = useState(null); 
+            const ghostCardRef = useRef(null); 
+            const longPressTimerRef = useRef(null);
+            const isScrollingRef = useRef(false);
+            const touchStartPos = useRef({ x: 0, y: 0 });
+
+            // Pull to Refresh State
+            const [pullY, setPullY] = useState(0);
+            const p2rStartY = useRef(0);
+            const isP2RActive = useRef(false);
+            const currentPullY = useRef(0); 
+
+            // Modal States
+            const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+            const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+            const [targetDeleteId, setTargetDeleteId] = useState(null);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [previewModalData, setPreviewModalData] = useState(null); 
+
+            const teamRefs = useRef([]);
+
+            // 초기 로드 시 LocalStorage 체크 (새로고침 방지)
+            useEffect(() => {
+                const savedTeams = localStorage.getItem('otp_confirmed_teams');
+                if (savedTeams) {
+                    try {
+                        const parsed = JSON.parse(savedTeams);
+                        setTeams(parsed.teams);
+                        setIsConfirmed(true);
+                        setActiveTab('results');
+                    } catch(e) {
+                        console.error("Failed to restore teams", e);
+                    }
+                }
+            }, []);
+
+            // 확정 상태일 때 팀 변경 시 자동 저장 (수정 사항 반영)
+            useEffect(() => {
+                if (isConfirmed && teams.length > 0) {
+                    localStorage.setItem('otp_confirmed_teams', JSON.stringify({
+                        teams,
+                        updatedAt: new Date().toISOString()
+                    }));
+                }
+            }, [teams, isConfirmed]);
+
+            useEffect(() => {
+                const init = async () => {
+                    try {
+                        await auth.signInAnonymously();
+                    } catch (e) { 
+                        console.error("Auth error:", e);
+                        document.getElementById('loading-screen').style.display = 'none';
+                    }
+                };
+                init();
+                const unsubscribeAuth = auth.onAuthStateChanged((u) => {
+                    if (u) {
+                        setUser(u);
+                        document.getElementById('loading-screen').style.display = 'none';
+                    }
+                });
+                return () => unsubscribeAuth();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                const unsubMembers = getCol('members').onSnapshot(snap => setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                const unsubSession = getCol('weekly_session').onSnapshot(snap => setSessionData(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                const unsubSettings = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('settings').doc('meeting_time').onSnapshot(doc => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        setMeetingDate(data.date || "");
+                        setMeetingTime({ start: data.start || "", end: data.end || "" });
+                        setSyncManagerName(data.managerName || "");
+                        
+                        const newLimit = data.maxLimit ? parseInt(data.maxLimit) : (data.maxMemberCount ? parseInt(data.maxMemberCount) : 18);
+                        setMaxMemberLimit(newLimit);
+
+                        const suggestedTeams = Math.max(2, Math.round(newLimit / 6));
+                        setTeamingSettings(prev => ({ ...prev, teamCount: suggestedTeams }));
+                    }
+                });
+                
+                const unsubDrafts = getCol('team_drafts').onSnapshot(snap => {
+                    const allData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    
+                    const drafts = allData.filter(d => !d.isConfirmed).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+                    const histories = allData.filter(d => d.isConfirmed).sort((a,b) => b.meetingDate.localeCompare(a.meetingDate)); // 날짜 역순
+                    
+                    setSavedDrafts(drafts);
+                    setConfirmedHistory(histories);
+                });
+                return () => { unsubMembers(); unsubSession(); unsubSettings(); unsubDrafts(); };
+            }, [user]);
+
+            useEffect(() => {
+                if (draggedItem) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+                return () => { document.body.style.overflow = ''; };
+            }, [draggedItem]);
+
+            // --- Pull to Refresh Logic ---
+            useEffect(() => {
+                const handleStart = (e) => {
+                    if (window.scrollY <= 10 && !draggedItem) { 
+                        p2rStartY.current = e.touches[0].clientY;
+                        isP2RActive.current = true;
+                    } else {
+                        isP2RActive.current = false;
+                    }
+                };
+                const handleMove = (e) => {
+                    if (!isP2RActive.current || draggedItem) return;
+                    const y = e.touches[0].clientY;
+                    const dy = y - p2rStartY.current;
+                    if (dy > 0) {
+                        const newPullY = Math.min(Math.pow(dy, 0.8), 150);
+                        currentPullY.current = newPullY;
+                        setPullY(newPullY);
+                    } else {
+                        currentPullY.current = 0;
+                        setPullY(0);
+                        isP2RActive.current = false; 
+                    }
+                };
+                const handleEnd = () => {
+                    if (!isP2RActive.current) return;
+                    if (currentPullY.current > 80) { window.location.reload(); } 
+                    else { setPullY(0); currentPullY.current = 0; }
+                    isP2RActive.current = false;
+                };
+                window.addEventListener('touchstart', handleStart, { passive: true });
+                window.addEventListener('touchmove', handleMove, { passive: false }); 
+                window.addEventListener('touchend', handleEnd);
+                return () => {
+                    window.removeEventListener('touchstart', handleStart);
+                    window.removeEventListener('touchmove', handleMove);
+                    window.removeEventListener('touchend', handleEnd);
+                };
+            }, [draggedItem]);
+
+            const allAttendees = useMemo(() => {
+                if (!meetingDate) return [];
+                return sessionData
+                    .filter(s => s.date === meetingDate && s.status !== '노쇼')
+                    .sort((a,b) => {
+                        const timeA = a.createdAt || '';
+                        const timeB = b.createdAt || '';
+                        if (timeA && timeB) return timeA.localeCompare(timeB); 
+                        return a.name.localeCompare(b.name);
+                    });
+            }, [sessionData, meetingDate]);
+
+            // [핵심] maxMemberLimit에 따라 Entry / Waiting 분리
+            const entryList = useMemo(() => allAttendees.slice(0, maxMemberLimit), [allAttendees, maxMemberLimit]);
+            const waitingList = useMemo(() => allAttendees.slice(maxMemberLimit), [allAttendees, maxMemberLimit]);
+            const selectedList = entryList;
+
+            const levelStats = useMemo(() => {
+                const stats = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+                selectedList.forEach(p => {
+                    const masterInfo = members.find(m => m.id === p.memberId) || {};
+                    const l = parseInt(masterInfo.level || p.level || 0);
+                    if (l > 0) {
+                        const n = l > 6 ? l - 6 : l;
+                        if (stats[n] !== undefined) stats[n]++;
+                    }
+                });
+                return stats;
+            }, [selectedList, members]);
+
+            const renderPlayerCard = (p) => {
+                const masterInfo = members.find(m => m.id === p.memberId) || {};
+                const lvl = masterInfo.level || p.level;
+                const gender = masterInfo.gender || p.gender;
+                const isGuest = p.isGuest;
+                return (
+                    <div key={p.id} className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 shadow-sm">
+                        <div className="flex items-center gap-1 text-left text-slate-900 leading-none">
+                            <span className="font-black text-slate-800">{p.name}</span>
+                            {gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded flex-shrink-0">W</span>}
+                            {isGuest && <span className="text-[9px] font-black bg-blue-600 text-white px-1.5 rounded flex-shrink-0">G</span>}
+                        </div>
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(lvl)}`}>{lvl}</span>
+                    </div>
+                );
+            };
+
+            const reorderMembersWithGenderRule = (memberList) => {
+                const size = memberList.length;
+                if (size === 0) return [];
+                const females = memberList.filter(m => m.gender === '여성');
+                const others = memberList.filter(m => m.gender !== '여성');
+                const result = new Array(size).fill(null);
+                if (females.length > 0 && size > 2) result[2] = females.shift();
+                if (females.length > 0 && size > 5) result[5] = females.shift();
+                for (let i = 0; i < size; i++) {
+                    if (result[i] === null) {
+                        if (others.length > 0) result[i] = others.shift();
+                        else if (females.length > 0) result[i] = females.shift();
+                    }
+                }
+                return result.filter(m => m !== null);
+            };
+
+            const generateTeams = () => {
+                const { teamCount, keepCouples } = teamingSettings;
+                const totalAttendees = selectedList.length;
+                if (totalAttendees < teamCount) return;
+                
+                localStorage.removeItem('otp_confirmed_teams');
+                setIsConfirmed(false);
+
+                // 1. Prepare Pool
+                let pool = selectedList.map(p => {
+                    const masterInfo = members.find(m => m.id === p.memberId) || {};
+                    const lvl = parseInt(masterInfo.level || p.level || 99);
+                    return { 
+                        ...p, 
+                        name: masterInfo.name || p.name, 
+                        level: lvl, 
+                        points: getLevelPoints(lvl), 
+                        coupleId: masterInfo.coupleId || '', 
+                        gender: masterInfo.gender || p.gender || '남성', 
+                        isGuest: p.isGuest || false 
+                    };
+                });
+                
+                // 2. Form Units (Handle Couples)
+                let units = [];
+                let processedIds = new Set();
+                
+                if (keepCouples) {
+                    pool.forEach(p => {
+                        if (!processedIds.has(p.id)) {
+                            if (p.coupleId) {
+                                const partner = pool.find(o => o.memberId === p.coupleId && !processedIds.has(o.id));
+                                if (partner) {
+                                    units.push({
+                                        members: [p, partner],
+                                        totalPoints: p.points + partner.points,
+                                        maxMemberPoints: Math.max(p.points, partner.points),
+                                        isCouple: true
+                                    });
+                                    processedIds.add(p.id); processedIds.add(partner.id);
+                                    return;
+                                }
+                            }
+                            units.push({ members: [p], totalPoints: p.points, maxMemberPoints: p.points, isCouple: false });
+                            processedIds.add(p.id);
+                        }
+                    });
+                } else {
+                    units = pool.map(p => ({ members: [p], totalPoints: p.points, maxMemberPoints: p.points, isCouple: false }));
+                }
+
+                // 3. Sort Units for Draft (Prioritize Strongest Units based on individual skill, then points)
+                units = shuffleArray(units);
+                units.sort((a, b) => {
+                    if (b.maxMemberPoints !== a.maxMemberPoints) return b.maxMemberPoints - a.maxMemberPoints;
+                    return b.totalPoints - a.totalPoints;
+                });
+
+                // 4. Initialize Teams
+                const baseCapacity = Math.floor(totalAttendees / teamCount);
+                const remainder = totalAttendees % teamCount;
+                const resultTeams = Array.from({ length: teamCount }, (_, i) => ({ 
+                    id: i,
+                    members: [], 
+                    scoreSum: 0, 
+                    capacity: baseCapacity + (i < remainder ? 1 : 0)
+                }));
+
+                // 5. Draft Logic: Dynamic Lowest Score First (with Capacity Check)
+                units.forEach(unit => {
+                    const required = unit.members.length;
+                    
+                    let candidates = resultTeams.filter(t => t.members.length + required <= t.capacity);
+                    
+                    if (candidates.length === 0) candidates = resultTeams;
+
+                    // Sort candidates: Lowest Score First -> Random
+                    candidates.sort((a, b) => {
+                        if (a.scoreSum !== b.scoreSum) return a.scoreSum - b.scoreSum;
+                        return Math.random() - 0.5;
+                    });
+
+                    // Assign to the weakest team
+                    const target = candidates[0];
+                    target.members.push(...unit.members);
+                    target.scoreSum += unit.totalPoints;
+                });
+
+                // 6. Post-Draft Optimization (Hill Climbing / Swapping)
+                const optimizeTeams = () => {
+                    let improved = true;
+                    let iterations = 0;
+                    while (improved && iterations < 100) {
+                        improved = false;
+                        iterations++;
+
+                        resultTeams.sort((a, b) => b.scoreSum - a.scoreSum);
+                        const strongTeam = resultTeams[0];
+                        const weakTeam = resultTeams[resultTeams.length - 1];
+
+                        const scoreDiff = strongTeam.scoreSum - weakTeam.scoreSum;
+                        if (scoreDiff <= 1) break; 
+
+                        let bestSwap = null;
+                        let bestNewDiff = scoreDiff;
+
+                        for (let i = 0; i < strongTeam.members.length; i++) {
+                            for (let j = 0; j < weakTeam.members.length; j++) {
+                                const m1 = strongTeam.members[i];
+                                const m2 = weakTeam.members[j];
+
+                                if (keepCouples && (m1.coupleId || m2.coupleId)) continue; 
+
+                                const newStrongScore = strongTeam.scoreSum - m1.points + m2.points;
+                                const newWeakScore = weakTeam.scoreSum - m2.points + m1.points;
+                                const newDiff = Math.abs(newStrongScore - newWeakScore);
+
+                                if (newDiff < bestNewDiff) {
+                                    bestNewDiff = newDiff;
+                                    bestSwap = { strongIdx: i, weakIdx: j };
+                                }
+                            }
+                        }
+
+                        if (bestSwap) {
+                            const m1 = strongTeam.members[bestSwap.strongIdx];
+                            const m2 = weakTeam.members[bestSwap.weakIdx];
+
+                            strongTeam.members[bestSwap.strongIdx] = m2;
+                            weakTeam.members[bestSwap.weakIdx] = m1;
+
+                            strongTeam.scoreSum = strongTeam.scoreSum - m1.points + m2.points;
+                            weakTeam.scoreSum = weakTeam.scoreSum - m2.points + m1.points;
+                            improved = true;
+                        }
+                    }
+                };
+                
+                optimizeTeams();
+
+                // 7. Final Sort (Display Order)
+                resultTeams.sort((a, b) => a.id - b.id);
+                
+                const finalTeams = resultTeams.map(t => {
+                    t.members.sort((a, b) => a.level - b.level);
+                    const reordered = reorderMembersWithGenderRule(t.members);
+                    return { members: reordered, scoreSum: Math.round(t.scoreSum * 10) / 10 };
+                });
+
+                setTeams(finalTeams);
+                setActiveTab('results');
+            };
+
+            const confirmTeams = async () => {
+                setIsConfirmed(true);
+                const persistentData = { teams, isConfirmed: true, updatedAt: new Date().toISOString() };
+                localStorage.setItem('otp_confirmed_teams', JSON.stringify(persistentData));
+                try {
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    
+                    const draftsRef = getCol('team_drafts');
+                    const snapshot = await draftsRef.where('meetingDate', '==', meetingDate).where('isConfirmed', '==', true).get();
+                    
+                    if (!snapshot.empty) {
+                        const docId = snapshot.docs[0].id;
+                        await draftsRef.doc(docId).update({
+                            teams,
+                            updatedAt: now.toISOString(),
+                            managerName: syncManagerName
+                        });
+                         alert('기존 확정 기록을 업데이트했습니다.');
+                    } else {
+                        await draftsRef.add({
+                            meetingDate,
+                            meetingTimeRange: `${meetingTime.start} ~ ${meetingTime.end}`,
+                            createdAt: now.toISOString(),
+                            timeLabel: timeStr,
+                            teams,
+                            managerName: syncManagerName,
+                            isConfirmed: true 
+                        });
+                        alert('편성이 확정되었습니다!\n이제 재편성하기 전까지 이 상태가 유지됩니다.');
+                    }
+                } catch (e) {
+                    console.error("Save failed", e);
+                    alert("서버 저장 실패 (로컬에는 저장됨)");
+                }
+            };
+
+            const resetTeams = () => {
+                if (window.confirm("현재 편성을 초기화하시겠습니까?\n확정되지 않은 데이터는 사라집니다.")) {
+                    setTeams([]);
+                    setIsConfirmed(false);
+                    localStorage.removeItem('otp_confirmed_teams');
+                    setActiveTab('generator');
+                }
+            };
+
+            const moveItem = (sourceTeamIdx, sourceMemberIdx, targetTeamIdx, targetMemberIdx) => {
+                if (sourceTeamIdx === targetTeamIdx && sourceMemberIdx === targetMemberIdx) return;
+                const newTeams = [...teams];
+                const sourceTeam = newTeams[sourceTeamIdx];
+                const targetTeam = newTeams[targetTeamIdx];
+                const [movedMember] = sourceTeam.members.splice(sourceMemberIdx, 1);
+                if (sourceTeamIdx === targetTeamIdx) { const actualTargetIdx = (targetMemberIdx === null || targetMemberIdx === undefined) ? targetTeam.members.length : targetMemberIdx; targetTeam.members.splice(actualTargetIdx, 0, movedMember); } 
+                else { if (targetMemberIdx === undefined || targetMemberIdx === null) { targetTeam.members.push(movedMember); } else { targetTeam.members.splice(targetMemberIdx, 0, movedMember); } }
+                sourceTeam.scoreSum = Math.round(sourceTeam.members.reduce((acc, cur) => acc + cur.points, 0) * 10) / 10;
+                if (sourceTeamIdx !== targetTeamIdx) { targetTeam.scoreSum = Math.round(targetTeam.members.reduce((acc, cur) => acc + cur.points, 0) * 10) / 10; }
+                newTeams[sourceTeamIdx].members = reorderMembersWithGenderRule(newTeams[sourceTeamIdx].members);
+                if (sourceTeamIdx !== targetTeamIdx) { newTeams[targetTeamIdx].members = reorderMembersWithGenderRule(newTeams[targetTeamIdx].members); }
+                setTeams(newTeams);
+            };
+
+            const handleDragStart = (e, teamIdx, memberIdx) => { setDraggedItem({ teamIdx, memberIdx }); e.dataTransfer.effectAllowed = 'move'; };
+            const handleDragOver = (e, teamIdx, memberIdx) => { e.preventDefault(); if (dragOverItem?.teamIdx !== teamIdx || dragOverItem?.memberIdx !== memberIdx) { setDragOverItem({ teamIdx, memberIdx }); } };
+            const handleDragEnd = () => { setDraggedItem(null); setDragOverItem(null); };
+            const handleDrop = (e, targetTeamIdx, targetMemberIdx) => { e.preventDefault(); setDragOverItem(null); if (!draggedItem) return; moveItem(draggedItem.teamIdx, draggedItem.memberIdx, targetTeamIdx, targetMemberIdx); setDraggedItem(null); };
+
+            // Mobile Touch Handlers - Improved for iPad/Mobile Stability
+            const handleTouchStart = (e, teamIdx, memberIdx, memberData) => {
+                if (!e.touches || e.touches.length === 0) return;
+                const touch = e.touches[0];
+                touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+                isScrollingRef.current = false;
+                if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = setTimeout(() => {
+                    // 스크롤 중이 아니라면 드래그 모드 진입
+                    if (!isScrollingRef.current) {
+                        if (navigator.vibrate) navigator.vibrate(50);
+                        setDraggedItem({ teamIdx, memberIdx });
+                        setMobileGhost({ memberData, initialX: touch.clientX, initialY: touch.clientY });
+                    }
+                }, 500);
+            };
+
+            const handleTouchMove = (e) => {
+                if (!e.touches || e.touches.length === 0) return;
+                const touch = e.touches[0];
+
+                if (draggedItem) {
+                    if (e.cancelable) e.preventDefault(); 
+                    if (ghostCardRef.current) { ghostCardRef.current.style.left = `${touch.clientX}px`; ghostCardRef.current.style.top = `${touch.clientY}px`; }
+                    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                    if (element) {
+                        const memberEl = element.closest('[data-member-idx]'); const teamEl = element.closest('[data-team-idx]');
+                        if (memberEl) { const tIdx = parseInt(memberEl.dataset.teamIdx); const mIdx = parseInt(memberEl.dataset.memberIdx); if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== mIdx) { setDragOverItem({ teamIdx: tIdx, memberIdx: mIdx }); } } 
+                        else if (teamEl) { const tIdx = parseInt(teamEl.dataset.teamIdx); if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== null) { setDragOverItem({ teamIdx: tIdx, memberIdx: null }); } }
+                    }
+                } else {
+                    const moveX = Math.abs(touch.clientX - touchStartPos.current.x); 
+                    const moveY = Math.abs(touch.clientY - touchStartPos.current.y);
+                    if (moveX > 10 || moveY > 10) { 
+                        isScrollingRef.current = true; 
+                        if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } 
+                    }
+                }
+            };
+            const handleTouchEnd = (e) => {
+                if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                if (draggedItem) { if (dragOverItem) { moveItem(draggedItem.teamIdx, draggedItem.memberIdx, dragOverItem.teamIdx, dragOverItem.memberIdx); } setDraggedItem(null); setMobileGhost(null); setDragOverItem(null); }
+            };
+            const handleContextMenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
+
+            const confirmSaveDraft = async () => {
+                setIsProcessing(true);
+                try {
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    await getCol('team_drafts').add({ meetingDate, meetingTimeRange: `${meetingTime.start} ~ ${meetingTime.end}`, createdAt: now.toISOString(), timeLabel: timeStr, teams, managerName: syncManagerName, isConfirmed: false });
+                    setIsSaveModalOpen(false);
+                } catch (e) { alert("저장 중 오류가 발생했습니다."); } finally { setIsProcessing(false); }
+            };
+
+            const openDeleteModal = (id) => { setTargetDeleteId(id); setIsDeleteModalOpen(true); };
+            const confirmDeleteDraft = async () => { if (!targetDeleteId) return; setIsProcessing(true); try { await getCol('team_drafts').doc(targetDeleteId).delete(); setIsDeleteModalOpen(false); setTargetDeleteId(null); } catch (e) { alert("삭제 처리 중 오류가 발생했습니다."); } finally { setIsProcessing(false); } };
+            const loadDraft = (draft) => { setTeams(draft.teams); setSyncManagerName(draft.managerName || ""); setActiveTab('results'); setIsConfirmed(!!draft.isConfirmed); setPreviewModalData(null); };
+
+            const captureIndividualTeams = async () => { setIsCapturing(true); try { for (let i = 0; i < teams.length; i++) { const element = teamRefs.current[i]; if (element) { const levelTags = element.querySelectorAll('.level-tag'); levelTags.forEach(tag => tag.style.display = 'none'); const canvas = await html2canvas(element, { backgroundColor: '#f1f5f9', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${meetingDate}_TEAM_${i + 1}.png`; link.click(); levelTags.forEach(tag => tag.style.display = 'inline-flex'); } } } catch (e) {} setIsCapturing(false); };
+            const captureAllInOne = async () => { setIsCapturing(true); const container = document.createElement('div'); container.style.padding = '40px'; container.style.backgroundColor = '#f1f5f9'; container.style.width = '1200px'; container.style.display = 'grid'; container.style.gridTemplateColumns = 'repeat(3, 1fr)'; container.style.gap = '20px'; container.style.position = 'fixed'; container.style.top = '-9999px'; const header = document.createElement('div'); header.style.gridColumn = 'span 3'; header.style.textAlign = 'center'; header.style.marginBottom = '30px'; header.innerHTML = `<h1 style="font-size: 36px; font-weight: 900; color: #0f172a; margin-bottom: 8px;">OTP FC TEAM LIST</h1><div style="font-size: 16px; font-weight: 700; color: #64748b;">DATE: ${meetingDate} (${meetingTime.start} ~ ${meetingTime.end}) | MANAGER: ${syncManagerName}</div>`; container.appendChild(header); document.body.appendChild(container); teamRefs.current.forEach((ref) => { if (ref) { const clone = ref.cloneNode(true); clone.querySelectorAll('.level-tag').forEach(tag => tag.remove()); clone.style.width = '100%'; clone.style.transform = 'none'; clone.style.boxShadow = 'none'; clone.style.border = '1px solid #e2e8f0'; container.appendChild(clone); } }); try { const canvas = await html2canvas(container, { backgroundColor: '#f1f5f9', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${meetingDate}_ALL_TEAMS.png`; link.click(); } catch (e) {} document.body.removeChild(container); setIsCapturing(false); };
+            const handleFontFileDrop = (e) => { e.preventDefault(); setIsDraggingFile(false); const file = e.dataTransfer.files[0]; if (file && (file.name.endsWith('.ttf') || file.name.endsWith('.otf') || file.name.endsWith('.woff') || file.name.endsWith('.woff2'))) { const reader = new FileReader(); reader.onload = (event) => { const fontData = event.target.result; const fontName = 'CustomUploadedFont'; const fontFace = new FontFace(fontName, `url(${fontData})`); fontFace.load().then((loadedFace) => { document.fonts.add(loadedFace); document.documentElement.style.setProperty('--main-font', `'${fontName}', sans-serif`); document.documentElement.style.setProperty('--bold-font', `'${fontName}', sans-serif`); setCustomFontName(file.name); alert(`폰트가 "${file.name}"(으)로 변경되었습니다!`); }).catch(err => { console.error('Font loading failed:', err); alert('폰트 로드 실패: 유효한 폰트 파일인지 확인해주세요.'); }); }; reader.readAsDataURL(file); } else { alert('ttf, otf, woff 파일만 지원합니다.'); } };
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 text-left">
+                    <div className="fixed top-0 left-0 w-full flex justify-center items-center pointer-events-none z-[9999]" style={{ height: '80px', transform: `translateY(${pullY - 80}px)`, opacity: pullY > 0 ? 1 : 0, transition: isP2RActive.current ? 'none' : 'transform 0.3s' }}>
+                        <div className="bg-white/90 backdrop-blur-md rounded-full px-4 py-2 shadow-lg flex items-center gap-2 text-slate-600 border border-slate-200">
+                             <Icon.Refresh className={`transition-all ${pullY > 80 ? 'rotate-180 text-blue-600' : ''}`} />
+                             <span className="text-xs font-black">{pullY > 80 ? '놓아서 새로고침' : '당겨서 새로고침'}</span>
+                        </div>
+                    </div>
+
+                    <header className="mb-8 text-center text-slate-900">
+                        <h1 className="text-4xl font-black tracking-tighter uppercase mb-3">Team Maker</h1>
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="inline-flex flex-col items-center bg-white px-6 py-3 rounded-[24px] border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm font-black text-blue-600 uppercase tracking-widest">{meetingDate || 'Syncing...'}</span>
+                                    {meetingTime.start && <div className="flex items-center gap-1 text-sm font-black text-green-600"><Icon.Clock /> {meetingTime.start} ~ {meetingTime.end}</div>}
+                                </div>
+                                <span className="text-xs font-bold text-slate-400">{selectedList.length}명 참여 확정 (정원 {maxMemberLimit}명)</span>
+                            </div>
+                            {syncManagerName && <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wide bg-blue-50 px-5 py-2 rounded-full border border-blue-100 shadow-sm"><Icon.Shield /> <span className="font-black underline decoration-2 underline-offset-4 decoration-blue-200">{syncManagerName}</span></div>}
+                        </div>
+                    </header>
+
+                    <nav className="flex gap-2 mb-8 bg-slate-200/50 p-1.5 rounded-2xl max-w-2xl mx-auto">
+                        {['generator', 'results', 'drafts', 'settings'].map(t => (
+                            <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>
+                                {t === 'generator' ? '설정 및 생성' : t === 'results' ? '현재 편성' : t === 'drafts' ? '저장소' : '설정'}
+                            </button>
+                        ))}
+                    </nav>
+
+                    {activeTab === 'generator' && (
+                        <div className="space-y-6 animate-fade-in text-left max-w-5xl mx-auto text-slate-900">
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-50 pb-4">
+                                    <div className="flex items-center gap-2 text-left">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest text-left">Entry Pool</h3>
+                                        <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">{entryList.length}명</span>
+                                        {waitingList.length > 0 && <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">대기 {waitingList.length}명</span>}
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
+                                        {[1,2,3,4,5,6].map(lvl => (
+                                            <div key={lvl} className="flex items-center gap-1.5">
+                                                <span className={`w-5 h-5 flex items-center justify-center rounded font-black text-[10px] ${getLevelColor(lvl)}`}>{lvl}</span>
+                                                <span className="text-sm font-black text-slate-700">{levelStats[lvl]}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                    {/* Entry List Render */}
+                                    <div className="flex flex-col gap-2">
+                                        <div className="sticky top-0 bg-white/95 backdrop-blur z-10 py-2 border-b border-slate-100 flex justify-between items-center mb-2"><span className="text-xs font-black text-blue-600 flex items-center gap-1.5 uppercase tracking-wider">Male Player</span></div>
+                                        <div className="flex flex-wrap gap-2 content-start min-h-[50px]">{entryList.filter(p => (members.find(m => m.id === p.memberId)?.gender || p.gender) === '남성').map(renderPlayerCard)}</div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 md:border-l md:border-slate-50 md:pl-4">
+                                        <div className="sticky top-0 bg-white/95 backdrop-blur z-10 py-2 border-b border-slate-100 flex justify-between items-center mb-2"><span className="text-xs font-black text-pink-500 flex items-center gap-1.5 uppercase tracking-wider">Female Player</span></div>
+                                        <div className="flex flex-wrap gap-2 content-start min-h-[50px]">{entryList.filter(p => (members.find(m => m.id === p.memberId)?.gender || p.gender) === '여성').map(renderPlayerCard)}</div>
+                                    </div>
+                                </div>
+                                {waitingList.length > 0 && (
+                                    <div className="mt-8 pt-6 border-t border-slate-100">
+                                        <h4 className="text-xs font-black text-orange-500 uppercase mb-4 text-left">Waiting List ({waitingList.length})</h4>
+                                        <div className="flex flex-wrap gap-2">{waitingList.map(renderPlayerCard)}</div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-lg text-slate-900 text-left">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8 text-left">
+                                    <div className="flex flex-col gap-2 text-left text-slate-900"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase text-left">Team Count</label><select className="p-4 bg-slate-50 rounded-2xl font-black text-lg text-left" value={teamingSettings.teamCount} onChange={e => setTeamingSettings({...teamingSettings, teamCount: parseInt(e.target.value)})}>{[2,3,4,5,6].map(v => <option key={v} value={v}>{v}개 팀 균등 편성</option>)}</select></div>
+                                    <div className="flex items-end"><label className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-blue-100 transition-all cursor-pointer"><span className="text-xs font-black text-slate-600">커플 무조건 동반 배정</span><input type="checkbox" checked={teamingSettings.keepCouples} onChange={e => setTeamingSettings({...teamingSettings, keepCouples: e.target.checked})} className="w-6 h-6 accent-blue-600 rounded" /></label></div>
+                                </div>
+                                <div className="p-5 bg-blue-50 border border-blue-100 rounded-3xl mb-8"><h4 className="text-xs font-black text-blue-600 uppercase mb-2 flex items-center gap-1.5"><Icon.Info /> Smart Balancing Engine</h4><ul className="text-[11px] text-slate-600 font-bold space-y-1.5 text-left"><li>• 개인 기량(티어)을 최우선으로 고려하여 강팀 쏠림 현상을 방지합니다.</li><li>• 1티어 선수가 없는 팀에 차상위 실력자를 우선 배정하여 전력을 보강합니다.</li><li>• 각 팀의 총 인원수를 균등하게 맞춥니다.</li></ul></div>
+                                <button onClick={generateTeams} className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black text-lg shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">편성 시작</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'results' && (
+                        <div className="animate-fade-in text-slate-900 text-left">
+                            {isConfirmed && <div className="bg-green-100 border-2 border-green-400 text-green-700 px-4 py-2 rounded-2xl mb-4 flex items-center justify-center gap-2 animate-fade-in"><Icon.Check /> <span className="font-black text-sm">확정된 편성입니다 (자동 저장 중)</span></div>}
+                            {mobileGhost && draggedItem && (
+                                <div ref={ghostCardRef} className="ghost-card bg-white p-3 rounded-2xl border-2 border-blue-500 flex items-center justify-between" style={{ left: mobileGhost.initialX, top: mobileGhost.initialY }}>
+                                    <div className="flex items-center gap-3"><div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 font-black text-xs">{draggedItem.memberIdx + 1}</div><div className="flex flex-col"><div className="flex items-center gap-1"><span className="font-black text-slate-900 text-sm">{mobileGhost.memberData.name}</span>{mobileGhost.memberData.gender === '여성' && <span className="text-[9px] font-black px-1 py-0.5 bg-pink-100 text-pink-600 rounded">W</span>}{mobileGhost.memberData.isGuest && <span className="text-[6px] font-black bg-blue-100 text-blue-600 px-0.5 rounded-sm">G</span>}</div></div></div><div className={`text-[10px] font-black px-2 py-1 rounded level-tag ${getLevelColor(mobileGhost.memberData.level)}`}>{mobileGhost.memberData.level}</div>
+                                </div>
+                            )}
+                            {teams.length === 0 ? <div className="py-20 text-center text-slate-300 font-black">결과가 없습니다.</div> : (
+                                <>
+                                    <div className="grid gap-1.5 md:gap-4 text-left" style={{ gridTemplateColumns: `repeat(${teams.length}, minmax(0, 1fr))` }}>
+                                        {teams.map((team, idx) => (
+                                            <div key={idx} ref={el => teamRefs.current[idx] = el} className="team-card bg-white rounded-2xl md:rounded-[32px] shadow-lg md:shadow-xl overflow-hidden border border-slate-100 text-left h-full flex flex-col" data-team-idx={idx} onDragOver={(e) => {e.preventDefault(); handleDragOver(e, idx, null);}} onDrop={(e) => {e.preventDefault(); handleDrop(e, idx, null);}} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+                                                <div className={`p-2 md:p-3 text-center font-black flex flex-col justify-between px-2 md:px-5 ${getTeamBadgeColor(idx)}`}>
+                                                    <div className="flex justify-between items-center w-full mb-1">
+                                                        <span className="text-[7px] md:text-[9px] opacity-90 tracking-widest uppercase inline-block">
+                                                            {idx < 3 ? 'IAMGROUND' : 'PLAB'}
+                                                        </span>
+                                                        <span className="text-[7px] md:text-[9px] font-black whitespace-nowrap opacity-90">
+                                                            {team.scoreSum} pts
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center w-full">
+                                                        <span className="text-[10px] md:text-base uppercase tracking-tight whitespace-nowrap">Team {idx + 1}</span>
+                                                        <span className="text-[8px] md:text-[10px] font-bold opacity-80 uppercase whitespace-nowrap">{team.members.length} 명</span>
+                                                    </div>
+                                                </div>
+                                                <div className="p-1 md:p-2 space-y-1 text-left min-h-[100px] flex-grow">
+                                                    {team.members.map((m, mIdx) => {
+                                                        const isPartnerPresent = m.coupleId && selectedList.some(p => p.memberId === m.coupleId);
+                                                        const isDragging = draggedItem?.teamIdx === idx && draggedItem?.memberIdx === mIdx;
+                                                        const isDragTarget = dragOverItem?.teamIdx === idx && dragOverItem?.memberIdx === mIdx;
+                                                        return (
+                                                            <div key={mIdx} data-team-idx={idx} data-member-idx={mIdx} draggable onDragStart={(e) => handleDragStart(e, idx, mIdx)} onDragOver={(e) => {e.preventDefault(); e.stopPropagation(); handleDragOver(e, idx, mIdx);}} onDragEnd={handleDragEnd} onDrop={(e) => {e.stopPropagation(); handleDrop(e, idx, mIdx);}} onTouchStart={(e) => handleTouchStart(e, idx, mIdx, m)} onContextMenu={handleContextMenu} className={`relative transition-all duration-200 touch-action-none ${isDragging ? 'dragging' : ''} ${isDragTarget ? 'pt-12' : ''}`}>
+                                                                {isDragTarget && <div className="absolute top-0 left-0 right-0 h-10 border-2 border-dashed border-blue-400 bg-blue-50/50 rounded-xl flex items-center justify-center pointer-events-none transform -translate-y-1"><span className="text-blue-500 font-bold text-xs">이 위치로 이동</span></div>}
+                                                                <div className={`flex items-center justify-between p-1 sm:p-1.5 gap-0.5 bg-slate-50 rounded md:rounded-xl transition-all shadow-sm border border-slate-100/50 md:border-transparent cursor-move select-none ${!isDragging ? 'hover:bg-blue-50 hover:border-blue-300 hover:shadow-md hover:scale-[1.02] hover:z-10 relative' : ''}`}>
+                                                                    <div className="flex items-center gap-0.5 flex-1 min-w-0">
+                                                                        <span className="w-3.5 h-3.5 md:w-5 md:h-5 flex items-center justify-center rounded-full text-[7px] md:text-[9px] font-black flex-shrink-0 bg-slate-200 text-slate-500">{mIdx + 1}</span>
+                                                                        <div className="flex items-center gap-0.5 text-slate-900 leading-none flex-nowrap whitespace-nowrap overflow-hidden">
+                                                                            <span className="font-black text-slate-800 text-[8px] sm:text-[9px] md:text-xs tracking-tighter whitespace-nowrap">{m.name}</span>
+                                                                            {m.gender === '여성' && <span className="text-[6px] md:text-[8px] font-black px-0.5 py-0.5 bg-pink-100 text-pink-600 rounded flex-shrink-0 leading-none">W</span>}
+                                                                            {isPartnerPresent && <span className="text-pink-400 text-[6px] md:text-[8px] flex-shrink-0 flex items-center"><Icon.Heart size={8} /></span>}
+                                                                            {m.isGuest && <span className="text-[5px] md:text-[7px] font-black bg-blue-100 text-blue-600 px-0.5 rounded-sm flex-shrink-0 leading-none">G</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className={`text-[7px] md:text-[10px] font-black px-1 py-0.5 rounded level-tag flex-shrink-0 leading-none ml-0.5 ${getLevelColor(m.level)}`}>{m.level}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {dragOverItem?.teamIdx === idx && dragOverItem?.memberIdx === null && <div className="h-10 border-2 border-dashed border-blue-400 bg-blue-50/50 rounded-xl mt-2 flex items-center justify-center pointer-events-none animate-pulse"><span className="text-blue-500 font-bold text-xs">맨 뒤로 이동</span></div>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-10 p-6 bg-white rounded-[40px] border border-slate-200 shadow-lg space-y-6 max-w-4xl mx-auto text-left text-slate-900">
+                                        <div className="flex flex-col sm:flex-row gap-3 justify-center text-left">
+                                            <button onClick={resetTeams} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all text-left"><Icon.RotateCcw /> 초기화</button>
+                                            <button onClick={generateTeams} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm hover:bg-slate-800 transition-all text-left"><Icon.Refresh /> 다시 편성</button>
+                                            <button onClick={() => setIsSaveModalOpen(true)} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-blue-700 transition-all text-left"><Icon.Bookmark /> 임시저장</button>
+                                            <button onClick={confirmTeams} className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-black text-sm shadow-xl transition-all text-left ${isConfirmed ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'}`}><Icon.Check /> {isConfirmed ? '확정됨' : '편성 확정'}</button>
+                                        </div>
+                                        <div className="border-t border-slate-100 pt-6 text-left">
+                                            <p className="text-center text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Export Options</p>
+                                            <div className="flex flex-col sm:flex-row gap-3 justify-center text-left">
+                                                <button onClick={captureIndividualTeams} disabled={isCapturing} className="flex-1 max-w-xs flex items-center justify-center gap-2 px-8 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs hover:bg-slate-200 transition-all disabled:opacity-50 text-left text-slate-700"><Icon.Camera /> 팀별 개별 저장</button>
+                                                <button onClick={captureAllInOne} disabled={isCapturing} className="flex-1 max-w-xs flex items-center justify-center gap-2 px-8 py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs hover:bg-blue-100 transition-all disabled:opacity-50 text-left text-blue-600"><Icon.Download /> 한 장으로 저장 (3팀씩)</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'drafts' && (
+                        <div className="animate-fade-in space-y-4 text-left max-w-3xl mx-auto text-slate-900">
+                             <div className="flex gap-2 mb-6">
+                                <button onClick={() => setStorageTab('drafts')} className={`flex-1 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${storageTab === 'drafts' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 hover:text-slate-600'}`}>임시 저장 ({savedDrafts.length})</button>
+                                <button onClick={() => setStorageTab('history')} className={`flex-1 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${storageTab === 'history' ? 'bg-green-600 text-white shadow-lg' : 'bg-white text-slate-400 hover:text-slate-600'}`}>확정 기록 ({confirmedHistory.length})</button>
+                            </div>
+                            
+                            {(storageTab === 'drafts' ? savedDrafts : confirmedHistory).length === 0 ? (
+                                <div className="py-20 text-center text-slate-300 font-black">기록이 없습니다.</div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {(storageTab === 'drafts' ? savedDrafts : confirmedHistory).map(item => (
+                                        <div 
+                                            key={item.id} 
+                                            className={`bg-white p-6 rounded-[32px] border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between transition-all gap-4 relative group ${storageTab === 'history' ? 'border-green-100 hover:border-green-300' : 'border-slate-200 hover:border-blue-300'}`}
+                                            onClick={() => setPreviewModalData(item)}
+                                        >
+                                            <div className="text-left text-slate-900 pointer-events-none">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg font-black text-slate-800">{item.meetingDate}</span>
+                                                    {item.timeLabel && <span className="text-[10px] text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded-full">{item.timeLabel}</span>}
+                                                    {storageTab === 'history' && <span className="text-[10px] text-green-600 font-black bg-green-50 px-2 py-0.5 rounded-full border border-green-100">CONFIRMED</span>}
+                                                </div>
+                                                <div className="flex flex-col gap-1 text-slate-500 text-left leading-none">
+                                                    <div className="flex gap-2 items-center leading-none text-left">
+                                                        <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest text-left flex items-center gap-1"><Icon.Clock size={10}/> {item.meetingTimeRange}</span>
+                                                        <div className="w-px h-2 bg-slate-200 text-left" />
+                                                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest text-left">{item.teams?.length || 0}개 팀</span>
+                                                        {item.managerName && (
+                                                            <>
+                                                                <div className="w-px h-2 bg-slate-200 text-left" />
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-left flex items-center gap-1"><Icon.Shield size={10}/> {item.managerName}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 text-left w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
+                                                <button onClick={() => loadDraft(item)} className={`flex-1 sm:flex-none px-6 py-3 rounded-2xl font-black text-xs transition-all text-center ${storageTab === 'history' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>불러오기</button>
+                                                <button onClick={() => openDeleteModal(item.id)} className="p-3 text-slate-300 hover:text-red-500 transition-all bg-slate-50 rounded-2xl hover:bg-red-50"><Icon.Trash size={16}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Mobile Preview Modal */}
+                    {previewModalData && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4" onClick={() => setPreviewModalData(null)}>
+                            <div className="bg-white rounded-[40px] w-full max-w-sm p-8 shadow-2xl animate-zoom-in" onClick={e => e.stopPropagation()}>
+                                <h3 className="text-xl font-black text-slate-900 mb-1">{previewModalData.meetingDate}</h3>
+                                <p className="text-xs text-slate-400 font-bold mb-6">{previewModalData.meetingTimeRange} ({previewModalData.teams.length} Teams)</p>
+                                
+                                <div className="space-y-4 mb-8 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                                    {previewModalData.teams.map((t, idx) => (
+                                        <div key={idx} className={`border rounded-2xl p-3 ${getTeamColorClass(idx)}`}>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${getTeamBadgeColor(idx)}`}>Team {idx+1}</span>
+                                                <span className="text-[10px] font-bold opacity-70">{t.scoreSum}pts</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {t.members.map(m => (
+                                                    <span key={m.name} className="text-[10px] bg-white/60 px-1.5 py-0.5 rounded font-bold">{m.name}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setPreviewModalData(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs">닫기</button>
+                                    <button onClick={() => { loadDraft(previewModalData); setPreviewModalData(null); }} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-blue-100">불러오기</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'settings' && (
+                        <div className="animate-fade-in text-left max-w-xl mx-auto text-slate-900">
+                            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-lg text-slate-900 text-left">
+                                <h3 className="text-xl font-black mb-6 text-slate-800 flex items-center gap-2">
+                                    <Icon.Settings /> 폰트 설정
+                                </h3>
+                                
+                                <div className="mb-8">
+                                    <p className="text-sm font-bold text-slate-500 mb-2">현재 적용된 폰트</p>
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                        <p className="font-black text-lg text-blue-600">{customFontName}</p>
+                                    </div>
+                                </div>
+
+                                <div 
+                                    className={`relative p-8 rounded-3xl border-2 border-dashed transition-all cursor-pointer ${isDraggingFile ? 'dropzone-active' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
+                                    onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                                    onDragLeave={(e) => { e.preventDefault(); setIsDraggingFile(false); }}
+                                    onDrop={handleFontFileDrop}
+                                >
+                                    <div className="flex flex-col items-center justify-center text-center gap-3 py-4 pointer-events-none">
+                                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-2">
+                                            <Icon.Upload />
+                                        </div>
+                                        <p className="font-black text-slate-700">폰트 파일(.ttf)을 여기로 드래그하세요</p>
+                                        <p className="text-xs font-medium text-slate-400 max-w-[200px] leading-relaxed">
+                                            ttf, otf, woff 파일을 지원하며<br/>드롭 즉시 전체 폰트가 변경됩니다.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isSaveModalOpen && (
+                        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 modal-backdrop">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-fade-in p-8 text-center">
+                                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <Icon.AlertCircle />
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 mb-2">편성안 저장</h3>
+                                <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">
+                                    현재 구성된 팀 편성 결과(3개 팀)를<br/>저장소에 임시로 기록하시겠습니까?
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setIsSaveModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all text-slate-600">취소</button>
+                                    <button onClick={confirmSaveDraft} disabled={isProcessing} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-50">
+                                        {isProcessing ? "저장 중..." : "저장하기"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isDeleteModalOpen && (
+                        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 modal-backdrop text-slate-900">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden animate-fade-in p-8 text-center">
+                                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <Icon.Trash />
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 mb-2">기록 삭제</h3>
+                                <p className="text-sm font-bold text-slate-500 mb-8 leading-relaxed">
+                                    해당 편성 기록을 영구적으로 삭제하시겠습니까?<br/>삭제된 데이터는 복구할 수 없습니다.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => {setIsDeleteModalOpen(false); setTargetDeleteId(null);}} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
+                                    <button onClick={confirmDeleteDraft} disabled={isProcessing} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-rose-100 hover:bg-rose-700 transition-all disabled:opacity-50">
+                                        {isProcessing ? "삭제 중..." : "삭제하기"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
