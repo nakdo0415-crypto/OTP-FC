@@ -255,6 +255,7 @@
                 setIsPresetModalOpen(true);
             };
 
+            // 개선된 매치 테이블 생성 알고리즘
             const generateMatchTable = () => {
                 if (!confirmedData) return;
                 const teams = confirmedData.teams.map((_, i) => String.fromCharCode(65 + i));
@@ -262,8 +263,18 @@
                 const { courtCount, matchDuration, breakDuration, startTime, endTime } = config;
                 let currentTime = new Date(`2024-01-01T${startTime}:00`);
                 const limitTime = new Date(`2024-01-01T${endTime}:00`);
+                
+                // 팀별 총 경기수 및 매치업 히스토리
                 const teamStats = {}; teams.forEach(t => teamStats[t] = 0);
                 const matchupHistory = {}; teams.forEach(t1 => { matchupHistory[t1] = {}; teams.forEach(t2 => { if(t1!==t2) matchupHistory[t1][t2] = 0; }); });
+                
+                // NEW: 구장 사용 빈도 추적 (특정 구장 편중 방지)
+                const courtUsage = {};
+                teams.forEach(t => {
+                    courtUsage[t] = {};
+                    for(let i = 0; i < courtCount; i++) courtUsage[t][i] = 0;
+                });
+
                 let sessionList = []; let matchIdx = 1;
 
                 while (currentTime < limitTime) {
@@ -277,12 +288,23 @@
                         let candidates = teams.filter(t => !usedInSession.has(t));
                         if (isSmall) candidates = candidates.filter(t => teamSizes[t] < 7);
                         if (candidates.length < 2) continue;
-                        candidates.sort((a, b) => (teamSizes[b] >= 7 ? 1 : 0) - (teamSizes[a] >= 7 ? 1 : 0));
+                        
+                        // 랜덤 셔플을 통해 매 라운드 동일한 탐색 순서로 인한 편향 방지
+                        candidates.sort(() => Math.random() - 0.5);
+
                         let bestPair = null; let minScore = Infinity;
                         for (let i = 0; i < candidates.length; i++) {
                             for (let j = i + 1; j < candidates.length; j++) {
                                 const t1 = candidates[i]; const t2 = candidates[j];
-                                const score = (matchupHistory[t1][t2] * 1000) + (teamStats[t1] + teamStats[t2]) * 10 + Math.random();
+                                
+                                // 패널티 계산
+                                const matchupPenalty = matchupHistory[t1][t2] * 10000; // 1순위: 서로 경기한 횟수 (다양한 팀과 매칭되도록)
+                                const matchCountPenalty = (teamStats[t1] + teamStats[t2]) * 100; // 2순위: 총 경기 수 (고른 휴식 보장)
+                                const courtPenalty = (courtUsage[t1][court.idx] + courtUsage[t2][court.idx]) * 50; // 3순위: 해당 구장에서 뛴 횟수 (특정 구장 몰림 방지)
+
+                                // 점수가 낮을수록 최적의 매칭
+                                const score = matchupPenalty + matchCountPenalty + courtPenalty + Math.random();
+
                                 if (score < minScore) { minScore = score; bestPair = [t1, t2]; }
                             }
                         }
@@ -292,6 +314,10 @@
                             usedInSession.add(t1); usedInSession.add(t2);
                             matchupHistory[t1][t2]++; matchupHistory[t2][t1]++;
                             teamStats[t1]++; teamStats[t2]++;
+                            
+                            // NEW: 구장 사용 횟수 증가
+                            courtUsage[t1][court.idx]++;
+                            courtUsage[t2][court.idx]++;
                         }
                     }
                     if (sessionMatches.length > 0) {
