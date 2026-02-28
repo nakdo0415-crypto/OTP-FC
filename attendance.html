@@ -36,10 +36,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     
     <style>
-        @font-face { font-family: 'Esamanru'; font-weight: 700; src: url('esamanru%20Bold.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 500; src: url('esamanru%20Medium.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 300; src: url('esamanru%20Light.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 400; src: url('esamanru%20Medium.ttf') format('truetype'); }
+        /* 폰트 CDN 적용: 로컬 파일 대신 눈누 웹폰트 사용 */
+        @font-face { font-family: 'Esamanru'; font-weight: 700; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_bold.woff') format('woff'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 500; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 400; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); }
+        @font-face { font-family: 'Esamanru'; font-weight: 300; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_light.woff') format('woff'); }
 
         body { 
             font-family: 'Esamanru', sans-serif !important;
@@ -769,7 +770,7 @@
                                     <div className="flex flex-col items-center mb-6 drop-shadow-xl animate-zoom-in hover:scale-105 transition-transform duration-300">
                                         {!logoError ? (
                                             <img 
-                                                src="KakaoTalk_20251203_102827701.png" 
+                                                src="KakaoTalk_20260301_063452705.jpg" 
                                                 alt="OTP FC Emblem" 
                                                 className="w-24 h-24 sm:w-32 sm:h-32 object-contain mb-2 mx-auto"
                                                 onError={() => setLogoError(true)} 
