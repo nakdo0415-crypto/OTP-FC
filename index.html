@@ -139,7 +139,14 @@
         const formatBirth = (birth) => {
             if (!birth) return '생일미입력';
             const clean = String(birth).replace(/[^0-9]/g, '');
-            return clean.length === 8 ? `${clean.substring(0,4)}-${clean.substring(4,6)}-${clean.substring(6,8)}` : birth;
+            if (clean.length === 8) {
+                return `${clean.substring(0,4)}-${clean.substring(4,6)}-${clean.substring(6,8)}`;
+            } else if (clean.length === 6) {
+                const yy = parseInt(clean.substring(0,2), 10);
+                const yearPrefix = yy < 50 ? '20' : '19';
+                return `${yearPrefix}${clean.substring(0,2)}-${clean.substring(2,4)}-${clean.substring(4,6)}`;
+            }
+            return birth;
         };
 
         const formatLocalDate = (d) => {
