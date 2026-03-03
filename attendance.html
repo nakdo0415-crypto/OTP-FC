@@ -772,9 +772,9 @@
                         <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b z-50 h-16 sm:h-20 flex items-center px-4 shadow-sm text-slate-900 transition-all">
                             <div className="max-w-5xl mx-auto w-full flex justify-between items-center text-left">
                                 <div className="flex items-center gap-1 sm:gap-2">
-                                    <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="px-3 sm:px-4 py-2 mr-1 rounded-xl font-black text-xs sm:text-base transition-all bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center gap-1.5 shadow-none border-none">
-                                        <Icon.Home size={16} />
-                                        <span className="hidden sm:inline">홈</span>
+                                    {/* 홈 버튼 추가 (문구 삭제 및 아이콘 크기/패딩 조정) */}
+                                    <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="p-2.5 mr-1 sm:mr-2 rounded-xl transition-all bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center shadow-none border-none">
+                                        <Icon.Home size={18} />
                                     </button>
                                     
                                     {['attendance', 'setup', 'history_list'].map((v) => (
