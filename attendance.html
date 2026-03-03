@@ -207,9 +207,14 @@
                 return () => clearInterval(timer);
             }, []);
             return (
-                <span className="text-xl sm:text-2xl font-bold text-slate-400 tabular-nums mb-6">
-                    {time.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                </span>
+                <div className="flex flex-col items-center justify-center my-6 sm:my-10 animate-zoom-in">
+                    <span className="text-6xl sm:text-7xl font-black text-slate-800 tabular-nums tracking-tighter drop-shadow-md">
+                        {time.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-400 tracking-widest uppercase mt-3">
+                        OTP FC Attendance
+                    </span>
+                </div>
             );
         };
 
@@ -799,30 +804,6 @@
                         {view === 'attendance' && !isLoginModalOpen && (
                             <div className="max-w-5xl mx-auto">
                                 <div className="flex flex-col items-center mb-8">
-                                    <div className="flex flex-col items-center mb-6 drop-shadow-xl animate-zoom-in hover:scale-105 transition-transform duration-300">
-                                        {!logoError ? (
-                                            <img 
-                                                src="KakaoTalk_20260301_063452705.jpg" 
-                                                alt="OTP FC Emblem" 
-                                                className="w-24 h-24 sm:w-32 sm:h-32 object-contain mb-2 mx-auto rounded-full"
-                                                onError={() => setLogoError(true)} 
-                                            />
-                                        ) : (
-                                            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 mx-auto">
-                                                <path d="M50 95C50 95 85 80 90 30H10C15 80 50 95 50 95Z" fill="#db2777" stroke="#fbbf24" strokeWidth="3"/>
-                                                <path d="M50 95C50 95 15 80 10 30H50V95Z" fill="#831843"/>
-                                                <path d="M10 30H90V15C90 9.47715 85.5228 5 80 5H20C14.4772 5 10 9.47715 10 15V30Z" fill="white"/>
-                                                <circle cx="50" cy="55" r="12" fill="white"/>
-                                                <path d="M50 43V47M50 63V67M38 55H42M58 55H62" stroke="#db2777" strokeWidth="2" strokeLinecap="round"/>
-                                                <circle cx="50" cy="55" r="8" stroke="#db2777" strokeWidth="2"/>
-                                                <path d="M20 40L35 75" stroke="#fbbf24" strokeWidth="1" opacity="0.5"/>
-                                                <path d="M80 40L65 75" stroke="#fbbf24" strokeWidth="1" opacity="0.5"/>
-                                            </svg>
-                                        )}
-                                        <h1 className="text-4xl sm:text-5xl font-black text-[#db2777] tracking-tighter uppercase leading-none mt-1 drop-shadow-sm text-center">
-                                            OTP FC <span className="text-[10px] text-slate-300 relative -top-4 font-bold">v2</span>
-                                        </h1>
-                                    </div>
                                     
                                     <CurrentTimeClock />
                                     
