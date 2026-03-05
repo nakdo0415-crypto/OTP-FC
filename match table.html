@@ -86,39 +86,81 @@
             padding-right: 1.25rem !important;
         }
 
-        /* 캡쳐 모드 전용 스타일: 모바일 화면 제약 해제 및 자르기(clipping) 방지 */
-        .capture-mode {
-            padding: 1.5rem !important;
-            background-color: #f8fafc !important;
-            height: max-content !important;
-            width: 800px !important; /* 강제 데스크탑 너비 배정으로 찌그러짐 방지 */
-            max-width: none !important;
+        /* 캡쳐 진행 중 라이브 DOM 레이아웃 강제 확장 및 흐려짐 방지 */
+        body.is-capturing {
+            height: auto !important;
+            min-height: 100vh !important;
+            overflow: visible !important;
+            width: 800px !important; /* 강제 데스크탑 너비 */
             margin: 0 auto !important;
+            background-color: #f8fafc !important;
         }
-        
-        /* 캡쳐 중 모든 hidden 속성 해제 (구장 이름 윗부분 잘림 방지) */
-        .capture-mode, .capture-mode * {
+        body.is-capturing #root,
+        body.is-capturing .h-screen,
+        body.is-capturing main {
+            height: auto !important;
             overflow: visible !important;
         }
-        .capture-mode .truncate {
-            white-space: normal !important;
-            text-overflow: clip !important;
+        body.is-capturing .sticky {
+            position: static !important; /* 고정 요소 해제 */
+        }
+        body.is-capturing header,
+        body.is-capturing footer,
+        body.is-capturing .no-capture {
+            display: none !important; /* 불필요한 UI 숨김 */
         }
         
+        /* 캡쳐 시 흐릿해지는 원인(애니메이션, 투명도 중간 상태) 원천 차단 */
+        body.is-capturing * {
+            animation: none !important;
+            transition: none !important;
+            text-rendering: optimizeLegibility !important;
+            -webkit-font-smoothing: antialiased !important;
+        }
+        
+        body.is-capturing #capture-area {
+            opacity: 1 !important;
+            transform: none !important;
+        }
+
+        body.is-capturing .truncate {
+            white-space: normal !important;
+            text-overflow: clip !important;
+            overflow: visible !important;
+        }
+        
+        /* 캡쳐 시 팀 박스, 배지 박스 글자 상단 쏠림 방지 (정중앙 정렬 보정) */
+        body.is-capturing .team-badge {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            padding-top: 0px !important;
+            padding-bottom: 3px !important; /* 2px(덜 올라감)와 4px(너무 올라감)의 완벽한 중간값 */
+        }
+        body.is-capturing .type-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            padding-top: 0px !important;
+            padding-bottom: 2px !important;
+        }
+
         .capture-header { display: none; }
-        .capture-mode .capture-header {
+        body.is-capturing .capture-header {
             display: block;
             text-align: center;
-            font-size: 1.2rem;
+            font-size: 1.8rem;
             font-weight: 900;
             color: #4f46e5;
-            margin-bottom: 0.75rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 2px dashed #c7d2fe;
+            margin-bottom: 1.5rem;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 3px dashed #c7d2fe;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        .capture-mode .no-capture { display: none !important; }
 
         @media print { .no-print { display: none; } }
     </style>
@@ -444,30 +486,28 @@
                 }
             };
 
-            // 이미지 캡쳐 로직 강화 (잘림 현상 개선)
+            // 캡쳐 흐려짐 방지를 위한 초고화질 스케일업 및 애니메이션 원천 차단 로직
             const handleCapture = () => {
                 setIsCapturing(true);
-                // 리액트가 .capture-mode 클래스를 적용하고 브라우저가 화면 레이아웃을 다시 계산할 시간을 충분히 줍니다.
+                
+                // body에 is-capturing 클래스를 추가하여 스크롤 제한 해제, 애니메이션 차단, 강제 데스크탑 너비 적용
+                document.body.classList.add('is-capturing');
+
+                // 모바일 브라우저가 CSS 변경(특히 애니메이션 중단)을 완벽히 렌더링하도록 1초(1000ms) 대기
                 setTimeout(async () => {
                     try {
                         const captureArea = document.getElementById('capture-area');
                         if (!captureArea) return;
 
                         const canvas = await window.html2canvas(captureArea, {
-                            scale: 2, 
+                            scale: 3, // 화질 대폭 상승 (기존 2 -> 3)
                             backgroundColor: '#f8fafc',
                             useCORS: true,
-                            windowWidth: 800, // 모바일에서도 데스크탑 해상도로 속여서 캡쳐 (찌그러짐 방지)
-                            onclone: (clonedDoc) => {
-                                const el = clonedDoc.getElementById('capture-area');
-                                if(el) {
-                                    el.style.width = '800px';
-                                    el.style.maxWidth = '800px';
-                                }
-                            }
+                            scrollY: 0,
+                            windowWidth: 800 // 강제 데스크탑 해상도 기준 렌더링
                         });
 
-                        const image = canvas.toDataURL("image/png");
+                        const image = canvas.toDataURL("image/png", 1.0);
                         const link = document.createElement("a");
                         link.href = image;
                         const dateStr = confirmedData?.meetingDate || new Date().toISOString().split('T')[0];
@@ -477,9 +517,11 @@
                         console.error("Capture failed:", error);
                         alert("캡쳐에 실패했습니다. 다시 시도해주세요.");
                     } finally {
+                        // 캡쳐 완료 후 원상 복구
+                        document.body.classList.remove('is-capturing');
                         setIsCapturing(false);
                     }
-                }, 500); // 딜레이를 500ms로 늘려 레이아웃 갱신 완벽 보장
+                }, 1000); 
             };
 
             const statsData = useMemo(() => {
@@ -607,13 +649,13 @@
                                 </div>
                             </div>
                         ) : view === 'results' ? (
-                            <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 animate-fade-in px-2 sm:px-3 pt-2 ${isCapturing ? 'capture-mode' : 'pb-16'}`}>
-                                {isCapturing && (
-                                    <div className="capture-header">
-                                        OTP FC 매치 테이블 ({confirmedData?.meetingDate || new Date().toLocaleDateString()})
-                                    </div>
-                                )}
-                                <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print ${isCapturing ? 'mb-2 static' : 'sticky top-0 z-40'}`}>
+                            <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 px-2 sm:px-3 pt-2 pb-16 ${isCapturing ? 'capture-mode' : 'animate-fade-in'}`}>
+                                {/* 캡쳐 시에만 나타나는 상단 헤더 */}
+                                <div className="capture-header">
+                                    OTP FC 매치 테이블 ({confirmedData?.meetingDate || new Date().toLocaleDateString()})
+                                </div>
+                                
+                                <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print no-capture ${isCapturing ? 'static' : 'sticky top-0 z-40'}`}>
                                     <div className="flex flex-wrap items-center justify-between gap-1">
                                         <div className="flex flex-wrap items-center gap-1">
                                             <button onClick={() => setSelectedMyTeam(null)} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] transition-all ${selectedMyTeam === null ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>전체보기</button>
@@ -627,7 +669,7 @@
                                                 );
                                             })}
                                         </div>
-                                        <div className="flex items-center gap-1 no-capture">
+                                        <div className="flex items-center gap-1">
                                             <button 
                                                 onClick={handleCapture} 
                                                 disabled={isCapturing}
@@ -645,7 +687,7 @@
                                         </div>
                                     </div>
                                     {isEditMode && (
-                                        <div className="mt-2 p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-center text-[10px] font-black animate-fade-in shadow-inner no-capture">
+                                        <div className="mt-2 p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-center text-[10px] font-black shadow-inner">
                                             변경할 두 팀을 차례로 클릭하여 교체하세요 (같은 경기 내에서만 가능)
                                         </div>
                                     )}
@@ -669,7 +711,6 @@
                                                     </div>
                                                 </div>
 
-                                                {/* overflow-hidden 제거, min-w-0 부여로 레이아웃 유지 */}
                                                 <div className="flex-1 min-w-0">
                                                     {resting && !isEditMode ? (
                                                         <div className="flex items-center justify-center h-full"><div className="bg-amber-50 text-amber-600 px-3 py-1 rounded-lg font-black text-[10px] italic">휴식 중</div></div>
@@ -686,19 +727,18 @@
 
                                                                 return (
                                                                     <div key={idx} className="flex-1 min-w-0 flex flex-col bg-white border-x border-slate-100 first:border-l-0 last:border-r-0 items-center justify-center py-0.5 relative rounded-md">
-                                                                        {/* overflow-hidden 제거 및 텍스트 줄바꿈(break-keep)과 padding 조정 */}
                                                                         <div className="flex items-center justify-center gap-1 mb-1 w-full px-1">
-                                                                            <span className={`${labelSize} font-black text-slate-900 leading-tight pt-[2px] break-keep text-center`}>
+                                                                            <span className={`${labelSize} font-black text-slate-900 leading-tight break-keep text-center truncate`}>
                                                                                 {config.fieldNames[m.fieldIdx] || `${m.fieldIdx+1}구장`}
                                                                             </span>
-                                                                            <span className={`text-[8px] font-black px-1 rounded-full ${typeBg} ${typeColor} tracking-tighter shrink-0`}>
+                                                                            <span className={`type-badge inline-flex items-center justify-center text-[8px] font-black px-1.5 py-[2px] rounded-full ${typeBg} ${typeColor} tracking-tighter shrink-0 leading-none`}>
                                                                                 {config.fieldTypes[m.fieldIdx]}
                                                                             </span>
                                                                         </div>
                                                                         <div className="flex items-center justify-center gap-0.5 w-full">
                                                                             <div 
                                                                                 onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 0, m.match[0])}
-                                                                                className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all
+                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all leading-none
                                                                                 ${getTeamStyles(m.match[0].charCodeAt(0)-65)} 
                                                                                 ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
                                                                                 ${selectedMyTeam && m.match[0] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
@@ -708,7 +748,7 @@
                                                                             <span className="text-[7px] font-black text-slate-300 italic px-0.5">vs</span>
                                                                             <div 
                                                                                 onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 1, m.match[1])}
-                                                                                className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all
+                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all leading-none
                                                                                 ${getTeamStyles(m.match[1].charCodeAt(0)-65)} 
                                                                                 ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
                                                                                 ${selectedMyTeam && m.match[1] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
@@ -731,7 +771,7 @@
                                                                 <span 
                                                                     key={t} 
                                                                     onClick={(e) => handleTeamClick(e, session.id, null, null, t, true)}
-                                                                    className={`w-4 h-4 flex items-center justify-center rounded-sm font-black text-[9px] transition-all
+                                                                    className={`team-badge w-4 h-4 flex items-center justify-center rounded-sm font-black text-[9px] transition-all leading-none
                                                                     ${getTeamStyles(t.charCodeAt(0)-65)} 
                                                                     ${done && !isEditMode ? 'grayscale opacity-30' : ''}
                                                                     ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-110 hover:ring-2 hover:ring-indigo-400' : ''}
@@ -753,7 +793,7 @@
                                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                                         {statsData?.teams.map((t) => (
                                             <div key={t} className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                                                <span className={`w-8 h-8 flex items-center justify-center rounded-md font-black text-lg mx-auto mb-1 ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span>
+                                                <span className={`team-badge w-8 h-8 flex items-center justify-center rounded-md font-black text-lg mx-auto mb-1 leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span>
                                                 <div className="text-lg font-black text-slate-800">{statsData.totalMatches[t]}</div>
                                             </div>
                                         ))}
@@ -773,7 +813,7 @@
                                                 <tbody>
                                                     {statsData?.teams.map(t => (
                                                         <tr key={t} className="hover:bg-slate-50 border-t border-slate-100">
-                                                            <td className="py-2 px-2 text-left"><span className={`px-2 py-0.5 rounded-md font-black text-[10px] ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
+                                                            <td className="py-2 px-2 text-left"><span className={`team-badge inline-flex items-center justify-center px-2 py-1 rounded-md font-black text-[10px] leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
                                                             {Array.from({ length: config.courtCount }).map((_, i) => (
                                                                 <td key={i} className={`py-2 px-1 font-black text-[11px] ${statsData.fieldUsage[t][i] === 0 ? 'text-slate-200' : 'text-slate-800'}`}>{statsData.fieldUsage[t][i]}</td>
                                                             ))}
@@ -796,7 +836,7 @@
                                                 <tbody>
                                                     {statsData?.teams.map(t => (
                                                         <tr key={t} className="hover:bg-slate-50 border-t border-slate-100">
-                                                            <td className="py-2 px-2 text-left"><span className={`px-2 py-0.5 rounded-md font-black text-[10px] ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
+                                                            <td className="py-2 px-2 text-left"><span className={`team-badge inline-flex items-center justify-center px-2 py-1 rounded-md font-black text-[10px] leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
                                                             {statsData?.teams.map(opp => (<td key={opp} className={`py-2 px-1 font-black text-[11px] ${t === opp ? 'bg-slate-50 text-slate-300' : (statsData.matchupCounts[t][opp] === 0 ? 'text-slate-200' : 'text-slate-800')}`}>{t === opp ? '-' : statsData.matchupCounts[t][opp]}</td>))}
                                                         </tr>
                                                     ))}
