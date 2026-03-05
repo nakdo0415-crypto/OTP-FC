@@ -38,12 +38,13 @@
     <main class="flex-1 overflow-hidden relative w-full max-w-lg mx-auto bg-gray-50 flex flex-col" id="main-content">
         
         <!-- ================= [홈 탭 뷰] ================= -->
-        <div id="view-home" class="p-3 h-full hidden flex flex-col justify-center gap-2">
+        <!-- hidden 클래스를 제거하여 앱 실행 시 가장 먼저 보이도록 수정 -->
+        <div id="view-home" class="p-3 h-full flex flex-col justify-center gap-2">
             <!-- 팀 엠블럼 추가 -->
             <div class="flex justify-center mb-1">
                 <div class="w-24 h-24 rounded-full bg-white shadow-inner flex items-center justify-center p-1 border border-pink-100">
-                    <!-- 이미지를 같은 경로에 logo.png로 저장해두시면 보입니다. -->
-                    <img src="./logo.png" alt="OTP FC Emblem" class="w-full h-full object-contain logo-glow" onerror="this.src='https://via.placeholder.com/100?text=OTP+FC'">
+                    <!-- 깃허브에 올리신 이미지 파일 이름을 아래 src에 정확히 맞춰주세요 -->
+                    <img src="./KakaoTalk_20251203_102827701_01.png" alt="OTP FC Emblem" class="w-full h-full object-contain logo-glow" onerror="this.src='https://via.placeholder.com/100?text=OTP+FC'">
                 </div>
             </div>
 
@@ -106,7 +107,8 @@
     <!-- 하단 네비게이션 바 -->
     <nav class="bg-white border-t border-gray-100 fixed bottom-0 w-full max-w-lg left-1/2 transform -translate-x-1/2 z-20 pb-safe shadow-lg">
         <div class="flex justify-around items-center h-12 px-10">
-            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-12 h-10 rounded-xl transition-all">
+            <!-- 홈 버튼에 처음부터 활성화 색상(bg-gray-100, text-gray-900)이 적용되어 있도록 수정 -->
+            <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-12 h-10 rounded-xl transition-all bg-gray-100 text-gray-900">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
@@ -315,7 +317,8 @@
             }, 2000);
         }
 
-        window.onload = initApp;
+        // window.onload 대신 HTML 문서가 읽히자마자 즉시 실행되도록 변경
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
