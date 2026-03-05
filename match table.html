@@ -12,6 +12,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <!-- html2canvas 라이브러리 추가 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <style>
         @font-face {
@@ -84,6 +86,40 @@
             padding-right: 1.25rem !important;
         }
 
+        /* 캡쳐 모드 전용 스타일: 모바일 화면 제약 해제 및 자르기(clipping) 방지 */
+        .capture-mode {
+            padding: 1.5rem !important;
+            background-color: #f8fafc !important;
+            height: max-content !important;
+            width: 800px !important; /* 강제 데스크탑 너비 배정으로 찌그러짐 방지 */
+            max-width: none !important;
+            margin: 0 auto !important;
+        }
+        
+        /* 캡쳐 중 모든 hidden 속성 해제 (구장 이름 윗부분 잘림 방지) */
+        .capture-mode, .capture-mode * {
+            overflow: visible !important;
+        }
+        .capture-mode .truncate {
+            white-space: normal !important;
+            text-overflow: clip !important;
+        }
+        
+        .capture-header { display: none; }
+        .capture-mode .capture-header {
+            display: block;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 900;
+            color: #4f46e5;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px dashed #c7d2fe;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .capture-mode .no-capture { display: none !important; }
+
         @media print { .no-print { display: none; } }
     </style>
 </head>
@@ -135,7 +171,8 @@
             Save: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>,
             Download: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>,
             Plus: ({size=14}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>,
-            Minus: ({size=14}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"/></svg>
+            Minus: ({size=14}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"/></svg>,
+            Camera: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         };
 
         function App() {
@@ -156,6 +193,13 @@
             const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
             const [isSaving, setIsSaving] = useState(false);
             const [scheduleToDelete, setScheduleToDelete] = useState(null);
+            
+            // --- Edit Mode States ---
+            const [isEditMode, setIsEditMode] = useState(false);
+            const [selectedForSwap, setSelectedForSwap] = useState(null);
+
+            // --- Capture State ---
+            const [isCapturing, setIsCapturing] = useState(false);
 
             const [config, setConfig] = useState({
                 courtCount: 3, matchDuration: 12, breakDuration: 3,
@@ -230,6 +274,8 @@
                 setCompletedMatches(new Set(savedData.completedMatches || []));
                 setSelectedMyTeam(savedData.selectedMyTeam || null);
                 setView('results'); setIsLoadModalOpen(false);
+                setIsEditMode(false);
+                setSelectedForSwap(null);
             };
 
             const handlePresetSelect = (preset) => {
@@ -255,7 +301,6 @@
                 setIsPresetModalOpen(true);
             };
 
-            // 개선된 매치 테이블 생성 알고리즘
             const generateMatchTable = () => {
                 if (!confirmedData) return;
                 const teams = confirmedData.teams.map((_, i) => String.fromCharCode(65 + i));
@@ -264,15 +309,15 @@
                 let currentTime = new Date(`2024-01-01T${startTime}:00`);
                 const limitTime = new Date(`2024-01-01T${endTime}:00`);
                 
-                // 팀별 총 경기수 및 매치업 히스토리
                 const teamStats = {}; teams.forEach(t => teamStats[t] = 0);
                 const matchupHistory = {}; teams.forEach(t1 => { matchupHistory[t1] = {}; teams.forEach(t2 => { if(t1!==t2) matchupHistory[t1][t2] = 0; }); });
                 
-                // NEW: 구장 사용 빈도 추적 (특정 구장 편중 방지)
                 const courtUsage = {};
+                const lastOpponent = {};
                 teams.forEach(t => {
                     courtUsage[t] = {};
                     for(let i = 0; i < courtCount; i++) courtUsage[t][i] = 0;
+                    lastOpponent[t] = null;
                 });
 
                 let sessionList = []; let matchIdx = 1;
@@ -289,7 +334,6 @@
                         if (isSmall) candidates = candidates.filter(t => teamSizes[t] < 7);
                         if (candidates.length < 2) continue;
                         
-                        // 랜덤 셔플을 통해 매 라운드 동일한 탐색 순서로 인한 편향 방지
                         candidates.sort(() => Math.random() - 0.5);
 
                         let bestPair = null; let minScore = Infinity;
@@ -297,13 +341,14 @@
                             for (let j = i + 1; j < candidates.length; j++) {
                                 const t1 = candidates[i]; const t2 = candidates[j];
                                 
-                                // 패널티 계산
-                                const matchupPenalty = matchupHistory[t1][t2] * 10000; // 1순위: 서로 경기한 횟수 (다양한 팀과 매칭되도록)
-                                const matchCountPenalty = (teamStats[t1] + teamStats[t2]) * 100; // 2순위: 총 경기 수 (고른 휴식 보장)
-                                const courtPenalty = (courtUsage[t1][court.idx] + courtUsage[t2][court.idx]) * 50; // 3순위: 해당 구장에서 뛴 횟수 (특정 구장 몰림 방지)
+                                const isBackToBack = (lastOpponent[t1] === t2 || lastOpponent[t2] === t1);
+                                const backToBackPenalty = isBackToBack ? 500000 : 0; 
+                                
+                                const matchupPenalty = matchupHistory[t1][t2] * 10000; 
+                                const matchCountPenalty = (teamStats[t1] + teamStats[t2]) * 100; 
+                                const courtPenalty = (courtUsage[t1][court.idx] + courtUsage[t2][court.idx]) * 50; 
 
-                                // 점수가 낮을수록 최적의 매칭
-                                const score = matchupPenalty + matchCountPenalty + courtPenalty + Math.random();
+                                const score = matchupPenalty + matchCountPenalty + courtPenalty + backToBackPenalty + Math.random();
 
                                 if (score < minScore) { minScore = score; bestPair = [t1, t2]; }
                             }
@@ -315,9 +360,10 @@
                             matchupHistory[t1][t2]++; matchupHistory[t2][t1]++;
                             teamStats[t1]++; teamStats[t2]++;
                             
-                            // NEW: 구장 사용 횟수 증가
                             courtUsage[t1][court.idx]++;
                             courtUsage[t2][court.idx]++;
+                            lastOpponent[t1] = t2;
+                            lastOpponent[t2] = t1;
                         }
                     }
                     if (sessionMatches.length > 0) {
@@ -333,7 +379,11 @@
                         if (new Date(currentTime.getTime() - breakDuration * 60000) >= limitTime) break;
                     } else break;
                 }
-                setSchedule({ list: sessionList, stats: teamStats }); setCompletedMatches(new Set()); setView('results');
+                setSchedule({ list: sessionList, stats: teamStats }); 
+                setCompletedMatches(new Set()); 
+                setIsEditMode(false);
+                setSelectedForSwap(null);
+                setView('results');
             };
 
             const toggleMatchCompletion = (id) => {
@@ -342,6 +392,94 @@
                     if (next.has(id)) next.delete(id); else next.add(id);
                     return next;
                 });
+            };
+
+            const handleTeamClick = (e, sessionId, fieldIdx, teamIdx, teamName, isResting = false) => {
+                e.stopPropagation(); 
+                if (!isEditMode || isCapturing) return; 
+                
+                if (!selectedForSwap) {
+                    setSelectedForSwap({ sessionId, fieldIdx, teamIdx, teamName, isResting });
+                } else {
+                    if (selectedForSwap.teamName === teamName) {
+                        setSelectedForSwap(null);
+                        return;
+                    }
+                    
+                    const newScheduleList = [...schedule.list];
+                    const s1 = selectedForSwap;
+                    const s2 = { sessionId, fieldIdx, teamIdx, teamName, isResting };
+                    
+                    if (s1.sessionId !== s2.sessionId) {
+                        alert("동일한 경기 시간(라운드) 내에서만 팀을 교체할 수 있습니다.");
+                        setSelectedForSwap(s2);
+                        return;
+                    }
+                    
+                    const sessionIndex = newScheduleList.findIndex(s => s.id === s1.sessionId);
+                    if (sessionIndex === -1) return;
+                    
+                    const session = { 
+                        ...newScheduleList[sessionIndex],
+                        matches: newScheduleList[sessionIndex].matches.map(m => ({ ...m, match: [...m.match] })),
+                        resting: [...newScheduleList[sessionIndex].resting]
+                    };
+
+                    const setTeam = (loc, newTeamName) => {
+                        if (loc.isResting) {
+                            const idx = session.resting.indexOf(loc.teamName);
+                            if(idx > -1) session.resting[idx] = newTeamName;
+                        } else {
+                            const matchIndex = session.matches.findIndex(m => m.fieldIdx === loc.fieldIdx);
+                            if(matchIndex > -1) session.matches[matchIndex].match[loc.teamIdx] = newTeamName;
+                        }
+                    }
+                    
+                    setTeam(s1, s2.teamName);
+                    setTeam(s2, s1.teamName);
+                    
+                    newScheduleList[sessionIndex] = session;
+                    setSchedule({ ...schedule, list: newScheduleList });
+                    setSelectedForSwap(null);
+                }
+            };
+
+            // 이미지 캡쳐 로직 강화 (잘림 현상 개선)
+            const handleCapture = () => {
+                setIsCapturing(true);
+                // 리액트가 .capture-mode 클래스를 적용하고 브라우저가 화면 레이아웃을 다시 계산할 시간을 충분히 줍니다.
+                setTimeout(async () => {
+                    try {
+                        const captureArea = document.getElementById('capture-area');
+                        if (!captureArea) return;
+
+                        const canvas = await window.html2canvas(captureArea, {
+                            scale: 2, 
+                            backgroundColor: '#f8fafc',
+                            useCORS: true,
+                            windowWidth: 800, // 모바일에서도 데스크탑 해상도로 속여서 캡쳐 (찌그러짐 방지)
+                            onclone: (clonedDoc) => {
+                                const el = clonedDoc.getElementById('capture-area');
+                                if(el) {
+                                    el.style.width = '800px';
+                                    el.style.maxWidth = '800px';
+                                }
+                            }
+                        });
+
+                        const image = canvas.toDataURL("image/png");
+                        const link = document.createElement("a");
+                        link.href = image;
+                        const dateStr = confirmedData?.meetingDate || new Date().toISOString().split('T')[0];
+                        link.download = `OTP_FC_매치표_${dateStr}.png`;
+                        link.click();
+                    } catch (error) {
+                        console.error("Capture failed:", error);
+                        alert("캡쳐에 실패했습니다. 다시 시도해주세요.");
+                    } finally {
+                        setIsCapturing(false);
+                    }
+                }, 500); // 딜레이를 500ms로 늘려 레이아웃 갱신 완벽 보장
             };
 
             const statsData = useMemo(() => {
@@ -368,7 +506,6 @@
                 <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-left">
                     <header className="bg-white border-b px-4 py-2 sm:py-3 shadow-sm z-50 shrink-0 no-print flex flex-col sm:flex-row justify-between items-center gap-2">
                         <div className="flex items-center gap-2 w-full sm:w-auto">
-                            {/* 홈 버튼 추가 */}
                             <button 
                                 onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} 
                                 className="p-2 mr-1 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 border border-slate-200 transition-all active:scale-95"
@@ -383,19 +520,19 @@
                             {schedule.list.length > 0 && (
                                 <div className="flex items-center gap-1.5">
                                     <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
-                                        <button onClick={() => setView('results')} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'results' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.List size={12} /> 매치표</button>
-                                        <button onClick={() => setView('stats')} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'stats' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.Chart size={12} /> 통계</button>
+                                        <button onClick={() => { setView('results'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'results' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.List size={12} /> 매치표</button>
+                                        <button onClick={() => { setView('stats'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'stats' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.Chart size={12} /> 통계</button>
                                     </div>
                                     <button onClick={saveMatchSchedule} disabled={isSaving} className="p-2 bg-green-50 text-green-600 border border-green-200 rounded-xl active:scale-95 transition-all"><Icon.Save size={16}/></button>
                                 </div>
                             )}
-                            <button onClick={() => setView('setup')} className={`p-2 border rounded-xl transition-all active:scale-95 ${view === 'setup' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-400'}`}><Icon.Settings size={18} /></button>
+                            <button onClick={() => { setView('setup'); setIsEditMode(false); setSelectedForSwap(null); }} className={`p-2 border rounded-xl transition-all active:scale-95 ${view === 'setup' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-400'}`}><Icon.Settings size={18} /></button>
                         </div>
                     </header>
 
-                    <main className="flex-1 p-2 sm:p-3 overflow-y-auto no-scrollbar">
+                    <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50" id="main-scroll">
                         {view === 'setup' ? (
-                            <div className="max-w-md mx-auto py-2 animate-fade-in text-left">
+                            <div className="max-w-md mx-auto py-4 px-2 sm:px-3 animate-fade-in text-left pb-16">
                                 <div className="mb-4 flex gap-2">
                                     <button onClick={() => setIsLoadModalOpen(true)} className="flex-1 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all">
                                         <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center"><Icon.Download size={14}/></div>
@@ -470,20 +607,48 @@
                                 </div>
                             </div>
                         ) : view === 'results' ? (
-                            <div className="w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 animate-fade-in pb-16">
-                                <div className="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm no-print sticky top-0 z-40">
-                                    <div className="flex flex-wrap items-center justify-center gap-1">
-                                        <button onClick={() => setSelectedMyTeam(null)} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] transition-all ${selectedMyTeam === null ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>전체보기</button>
-                                        {confirmedData?.teams.map((t, i) => {
-                                            const name = String.fromCharCode(65 + i);
-                                            const on = selectedMyTeam === name;
-                                            return (
-                                                <button key={name} onClick={() => setSelectedMyTeam(name)} className={`px-2 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1 transition-all ${on ? 'ring-2 ring-slate-900/10 scale-105 z-10' : 'opacity-80 grayscale-[30%]'}`} style={{ backgroundColor: getTeamBaseColor(i), color: (name === 'C' || name === 'D') ? '#1e293b' : 'white' }}>
-                                                    {on && <Icon.Star size={10}/>}<span>{name}({t.members.length})</span>
-                                                </button>
-                                            );
-                                        })}
+                            <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 animate-fade-in px-2 sm:px-3 pt-2 ${isCapturing ? 'capture-mode' : 'pb-16'}`}>
+                                {isCapturing && (
+                                    <div className="capture-header">
+                                        OTP FC 매치 테이블 ({confirmedData?.meetingDate || new Date().toLocaleDateString()})
                                     </div>
+                                )}
+                                <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print ${isCapturing ? 'mb-2 static' : 'sticky top-0 z-40'}`}>
+                                    <div className="flex flex-wrap items-center justify-between gap-1">
+                                        <div className="flex flex-wrap items-center gap-1">
+                                            <button onClick={() => setSelectedMyTeam(null)} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] transition-all ${selectedMyTeam === null ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>전체보기</button>
+                                            {confirmedData?.teams.map((t, i) => {
+                                                const name = String.fromCharCode(65 + i);
+                                                const on = selectedMyTeam === name;
+                                                return (
+                                                    <button key={name} onClick={() => setSelectedMyTeam(name)} className={`px-2 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1 transition-all ${on ? 'ring-2 ring-slate-900/10 scale-105 z-10' : 'opacity-80 grayscale-[30%]'}`} style={{ backgroundColor: getTeamBaseColor(i), color: (name === 'C' || name === 'D') ? '#1e293b' : 'white' }}>
+                                                        {on && <Icon.Star size={10}/>}<span>{name}({t.members.length})</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex items-center gap-1 no-capture">
+                                            <button 
+                                                onClick={handleCapture} 
+                                                disabled={isCapturing}
+                                                className="px-3 py-1.5 rounded-lg font-black text-[10px] transition-all border bg-slate-800 text-white border-slate-800 hover:bg-slate-700 flex items-center gap-1 shrink-0 shadow-md active:scale-95"
+                                            >
+                                                {isCapturing ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Icon.Camera size={12} />}
+                                                캡쳐
+                                            </button>
+                                            <button 
+                                                onClick={() => { setIsEditMode(!isEditMode); setSelectedForSwap(null); }} 
+                                                className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all border shrink-0 ${isEditMode ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                            >
+                                                {isEditMode ? '수정 완료' : '매치 수정'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {isEditMode && (
+                                        <div className="mt-2 p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-center text-[10px] font-black animate-fade-in shadow-inner no-capture">
+                                            변경할 두 팀을 차례로 클릭하여 교체하세요 (같은 경기 내에서만 가능)
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="results-list px-0.5">
@@ -495,26 +660,24 @@
                                         if (selectedMyTeam && matches.length === 0 && !resting) return null;
 
                                         return (
-                                            <div key={session.id} onClick={() => toggleMatchCompletion(session.id)} className={`match-row gap-1.5 ${done ? 'match-completed' : 'hover:border-indigo-300'}`}>
-                                                <div className="flex flex-col items-center justify-center pr-1.5 border-r border-slate-100 min-w-[65px] shrink-0 text-center">
-                                                    {/* 경기 문구 폰트 키움 */}
+                                            <div key={session.id} onClick={() => !isEditMode && toggleMatchCompletion(session.id)} className={`match-row gap-1.5 ${done ? 'match-completed' : (isEditMode && !isCapturing ? 'border-indigo-100 bg-slate-50 ring-1 ring-indigo-50' : 'hover:border-indigo-300')}`}>
+                                                <div className="flex flex-col items-center justify-center pr-1.5 border-r border-slate-200 min-w-[65px] shrink-0 text-center">
                                                     <span className="text-[12px] sm:text-[14px] font-black text-black leading-none mb-1">{session.id}경기</span>
-                                                    <div className={`flex flex-col items-center ${done ? 'strikethrough opacity-60' : ''}`}>
-                                                        {/* 시간 파란색 변경 및 크기 통일 */}
+                                                    <div className={`flex flex-col items-center ${done && !isEditMode ? 'strikethrough opacity-60' : ''}`}>
                                                         <span className="text-[11px] sm:text-[12px] font-black text-blue-600 leading-none">{session.startTime}</span>
                                                         <span className="text-[11px] sm:text-[12px] font-black text-blue-600 leading-none mt-1">{session.endTime}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex-1 overflow-hidden">
-                                                    {resting ? (
+                                                {/* overflow-hidden 제거, min-w-0 부여로 레이아웃 유지 */}
+                                                <div className="flex-1 min-w-0">
+                                                    {resting && !isEditMode ? (
                                                         <div className="flex items-center justify-center h-full"><div className="bg-amber-50 text-amber-600 px-3 py-1 rounded-lg font-black text-[10px] italic">휴식 중</div></div>
                                                     ) : (
                                                         <div className="flex flex-row flex-nowrap gap-1 w-full h-full">
                                                             {matches.map((m, idx) => {
                                                                 const courtCount = matches.length;
                                                                 const iconSize = courtCount > 4 ? 'w-6 h-6' : courtCount > 2 ? 'w-7 h-7' : 'w-8 h-8';
-                                                                // 구장 이름 사이즈 키움
                                                                 const labelSize = courtCount > 4 ? 'text-[12px]' : 'text-[14px]';
                                                                 
                                                                 const isSmall = config.fieldTypes[m.fieldIdx] === '5vs5';
@@ -522,21 +685,36 @@
                                                                 const typeBg = isSmall ? 'bg-rose-50' : 'bg-indigo-50';
 
                                                                 return (
-                                                                    <div key={idx} className="flex-1 min-w-0 flex flex-col bg-white border-x border-slate-100 first:border-l-0 last:border-r-0 items-center justify-center py-0.5 relative">
-                                                                        {/* 상단 구장 이름 + 규격 표시 강화 (색상 뱃지화) */}
-                                                                        <div className="flex items-center justify-center gap-1 mb-1 w-full overflow-hidden px-1">
-                                                                            <span className={`${labelSize} font-black text-slate-900 truncate leading-none`}>
+                                                                    <div key={idx} className="flex-1 min-w-0 flex flex-col bg-white border-x border-slate-100 first:border-l-0 last:border-r-0 items-center justify-center py-0.5 relative rounded-md">
+                                                                        {/* overflow-hidden 제거 및 텍스트 줄바꿈(break-keep)과 padding 조정 */}
+                                                                        <div className="flex items-center justify-center gap-1 mb-1 w-full px-1">
+                                                                            <span className={`${labelSize} font-black text-slate-900 leading-tight pt-[2px] break-keep text-center`}>
                                                                                 {config.fieldNames[m.fieldIdx] || `${m.fieldIdx+1}구장`}
                                                                             </span>
                                                                             <span className={`text-[8px] font-black px-1 rounded-full ${typeBg} ${typeColor} tracking-tighter shrink-0`}>
                                                                                 {config.fieldTypes[m.fieldIdx]}
                                                                             </span>
                                                                         </div>
-                                                                        {/* 대진 팀 */}
                                                                         <div className="flex items-center justify-center gap-0.5 w-full">
-                                                                            <div className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm ${getTeamStyles(m.match[0].charCodeAt(0)-65)} ${done ? 'grayscale opacity-30' : ''} ${selectedMyTeam && m.match[0] !== selectedMyTeam ? 'opacity-40' : ''}`}>{m.match[0]}</div>
+                                                                            <div 
+                                                                                onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 0, m.match[0])}
+                                                                                className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all
+                                                                                ${getTeamStyles(m.match[0].charCodeAt(0)-65)} 
+                                                                                ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
+                                                                                ${selectedMyTeam && m.match[0] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
+                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-indigo-400' : ''}
+                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[0] && !isCapturing ? 'ring-2 ring-indigo-500 scale-110 z-10 shadow-lg' : ''}
+                                                                                `}>{m.match[0]}</div>
                                                                             <span className="text-[7px] font-black text-slate-300 italic px-0.5">vs</span>
-                                                                            <div className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm ${getTeamStyles(m.match[1].charCodeAt(0)-65)} ${done ? 'grayscale opacity-30' : ''} ${selectedMyTeam && m.match[1] !== selectedMyTeam ? 'opacity-40' : ''}`}>{m.match[1]}</div>
+                                                                            <div 
+                                                                                onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 1, m.match[1])}
+                                                                                className={`${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all
+                                                                                ${getTeamStyles(m.match[1].charCodeAt(0)-65)} 
+                                                                                ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
+                                                                                ${selectedMyTeam && m.match[1] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
+                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-indigo-400' : ''}
+                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[1] && !isCapturing ? 'ring-2 ring-indigo-500 scale-110 z-10 shadow-lg' : ''}
+                                                                                `}>{m.match[1]}</div>
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -545,11 +723,21 @@
                                                     )}
                                                 </div>
 
-                                                {!selectedMyTeam && session.resting.length > 0 && (
-                                                    <div className="flex flex-col items-center justify-center pl-1 border-l border-slate-100 shrink-0 h-full gap-0.5">
+                                                {(!selectedMyTeam || isEditMode) && session.resting.length > 0 && (
+                                                    <div className={`flex flex-col items-center justify-center pl-1 border-l shrink-0 h-full gap-0.5 ${isEditMode ? 'border-indigo-100 bg-indigo-50/30 w-[45px]' : 'border-slate-100 w-[40px]'}`}>
                                                         <span className="text-[6px] font-black uppercase text-amber-500">Rest</span>
-                                                        <div className="flex flex-wrap max-w-[35px] justify-center gap-0.5">
-                                                            {session.resting.map(t => (<span key={t} className={`w-3.5 h-3.5 flex items-center justify-center rounded-sm font-black text-[8px] ${getTeamStyles(t.charCodeAt(0)-65)} ${done ? 'grayscale opacity-30' : ''}`}>{t}</span>))}
+                                                        <div className="flex flex-wrap justify-center gap-1 w-full">
+                                                            {session.resting.map(t => (
+                                                                <span 
+                                                                    key={t} 
+                                                                    onClick={(e) => handleTeamClick(e, session.id, null, null, t, true)}
+                                                                    className={`w-4 h-4 flex items-center justify-center rounded-sm font-black text-[9px] transition-all
+                                                                    ${getTeamStyles(t.charCodeAt(0)-65)} 
+                                                                    ${done && !isEditMode ? 'grayscale opacity-30' : ''}
+                                                                    ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-110 hover:ring-2 hover:ring-indigo-400' : ''}
+                                                                    ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === t && !isCapturing ? 'ring-2 ring-indigo-500 scale-125 z-10 shadow-lg' : ''}
+                                                                    `}>{t}</span>
+                                                            ))}
                                                         </div>
                                                     </div>
                                                 )}
@@ -559,7 +747,7 @@
                                 </div>
                             </div>
                         ) : (
-                            <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-4 animate-fade-in pb-16">
+                            <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-4 animate-fade-in pb-16 px-2 sm:px-3 pt-4">
                                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 text-center">
                                     <h3 className="text-sm font-black text-slate-800 mb-3 flex items-center justify-center gap-2 uppercase tracking-widest"><Icon.Chart size={16}/> 팀별 총 경기 수</h3>
                                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
