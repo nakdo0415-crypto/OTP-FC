@@ -22,11 +22,14 @@
             25% { transform: translateX(-8px); }
             75% { transform: translateX(8px); }
         }
+        
+        /* 로고 에니메이션 */
+        .logo-glow { filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.3)); }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden text-gray-800">
 
-    <!-- 상단 헤더 (최대한 슬림하게) -->
+    <!-- 상단 헤더 -->
     <header class="bg-gray-900 text-white py-2 px-4 shadow-lg z-10 flex-shrink-0 border-b border-gray-800">
         <h1 class="text-base font-black text-center tracking-tighter italic" id="header-title">OTP FC HUB</h1>
     </header>
@@ -36,13 +39,21 @@
         
         <!-- ================= [홈 탭 뷰] ================= -->
         <div id="view-home" class="p-3 h-full hidden flex flex-col justify-center gap-2">
+            <!-- 팀 엠블럼 추가 -->
+            <div class="flex justify-center mb-1">
+                <div class="w-24 h-24 rounded-full bg-white shadow-inner flex items-center justify-center p-1 border border-pink-100">
+                    <!-- 이미지를 같은 경로에 logo.png로 저장해두시면 보입니다. -->
+                    <img src="./logo.png" alt="OTP FC Emblem" class="w-full h-full object-contain logo-glow" onerror="this.src='https://via.placeholder.com/100?text=OTP+FC'">
+                </div>
+            </div>
+
             <div class="mb-1 text-center">
                 <h2 class="text-lg font-bold text-gray-900 leading-tight">반갑습니다! 👋</h2>
-                <p class="text-[10px] text-gray-400 font-medium italic">OTP FC Management System</p>
+                <p class="text-[10px] text-gray-400 font-medium italic">ONE TWO PASS FUTSAL CLUB</p>
             </div>
             
             <div id="link-buttons-container" class="flex flex-col gap-2">
-                <!-- JS에서 동적 생성됨 (4개 기본 시스템 + 커스텀) -->
+                <!-- JS에서 동적 생성됨 -->
             </div>
         </div>
 
@@ -92,7 +103,7 @@
 
     </main>
 
-    <!-- 하단 네비게이션 바 (슬림) -->
+    <!-- 하단 네비게이션 바 -->
     <nav class="bg-white border-t border-gray-100 fixed bottom-0 w-full max-w-lg left-1/2 transform -translate-x-1/2 z-20 pb-safe shadow-lg">
         <div class="flex justify-around items-center h-12 px-10">
             <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center justify-center w-12 h-10 rounded-xl transition-all">
@@ -119,7 +130,6 @@
         const PIN = "2295";
         let isAdminAuthenticated = false;
 
-        // 고유 아이콘 SVG
         const icons = {
             attendance: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>`,
             roster: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`,
@@ -128,7 +138,6 @@
             default: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`
         };
 
-        // 고정된 기본 링크 (하드코딩)
         const fixedLinks = [
             { id: 'att', name: '출결 관리', url: 'https://nakdo0415-crypto.github.io/OTP-FC/attendance.html', color: 'emerald', icon: 'attendance' },
             { id: 'ros', name: '명단 관리', url: 'https://nakdo0415-crypto.github.io/OTP-FC/index.html', color: 'blue', icon: 'roster' },
@@ -141,11 +150,7 @@
         function initApp() {
             const savedCustom = localStorage.getItem('otpfc_custom_links');
             if (savedCustom) {
-                try {
-                    customLinks = JSON.parse(savedCustom);
-                } catch (e) {
-                    customLinks = [];
-                }
+                try { customLinks = JSON.parse(savedCustom); } catch (e) { customLinks = []; }
             }
             switchTab('home');
         }
@@ -230,13 +235,9 @@
             allLinks.forEach(link => {
                 const style = colorMap[link.color] || colorMap.gray;
                 const iconSvg = icons[link.icon] || icons.default;
-                
                 const btn = document.createElement('button');
                 btn.className = `system-card w-full flex items-center p-3 rounded-xl border-b-2 transition-all shadow-sm ${style.bg} ${style.border} active:shadow-inner`;
-                
-                btn.onclick = () => {
-                    window.location.href = formatUrl(link.url);
-                };
+                btn.onclick = () => { window.location.href = formatUrl(link.url); };
 
                 btn.innerHTML = `
                     <div class="${style.iconBg} text-white shadow-md w-10 h-10 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
@@ -244,9 +245,7 @@
                     </div>
                     <div class="text-left">
                         <div class="font-bold ${style.text} text-sm tracking-tighter">${link.name}</div>
-                        <div class="text-[8px] font-bold ${style.sub} uppercase tracking-widest mt-0.5">
-                            System Access →
-                        </div>
+                        <div class="text-[8px] font-bold ${style.sub} uppercase tracking-widest mt-0.5">System Access →</div>
                     </div>
                 `;
                 container.appendChild(btn);
@@ -256,23 +255,16 @@
         function renderSettings() {
             const container = document.getElementById('registered-links-container');
             container.innerHTML = '';
-
-            // 커스텀 링크만 관리 가능하게 표시
-            if (customLinks.length === 0) {
-                container.innerHTML = '<p class="text-center py-4 text-xs text-gray-400 italic">추가로 등록된 시스템이 없습니다.</p>';
-            }
+            if (customLinks.length === 0) container.innerHTML = '<p class="text-center py-4 text-xs text-gray-400 italic">추가로 등록된 시스템이 없습니다.</p>';
 
             customLinks.forEach(link => {
                 const item = document.createElement('div');
                 item.className = 'bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-2';
-                
                 item.innerHTML = `
                     <div class="flex justify-between items-center">
                         <span class="text-[8px] font-black uppercase tracking-widest text-gray-400">커스텀 시스템</span>
                         <button onclick="deleteLink('${link.id}')" class="text-rose-500 p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                     </div>
                     <input type="text" value="${link.name}" oninput="updateLink('${link.id}', 'name', this.value)" class="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-gray-900" placeholder="시스템 이름">
@@ -283,33 +275,20 @@
         }
 
         function addNewLink() {
-            const nameInput = document.getElementById('new-name');
-            const urlInput = document.getElementById('new-url');
-            const name = nameInput.value.trim();
-            const url = urlInput.value.trim();
+            const name = document.getElementById('new-name').value.trim();
+            const url = document.getElementById('new-url').value.trim();
             if (!name) return showToast('이름을 입력하세요.');
-
-            customLinks.push({
-                id: 'custom_' + Date.now(),
-                name: name,
-                url: url,
-                color: 'gray',
-                icon: 'default'
-            });
-
+            customLinks.push({ id: 'custom_' + Date.now(), name, url, color: 'gray', icon: 'default' });
             saveCustomLinks();
-            nameInput.value = '';
-            urlInput.value = '';
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-url').value = '';
             renderSettings();
             showToast('추가 완료');
         }
 
         function updateLink(id, field, value) {
             const idx = customLinks.findIndex(l => l.id === id);
-            if (idx !== -1) {
-                customLinks[idx][field] = value;
-                saveCustomLinks();
-            }
+            if (idx !== -1) { customLinks[idx][field] = value; saveCustomLinks(); }
         }
 
         function deleteLink(id) {
