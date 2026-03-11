@@ -238,6 +238,7 @@
 
             // 탭 및 필터
             const [memberSubTab, setMemberSubTab] = useState(() => sessionStorage.getItem('otp_sub_tab') || 'directory'); 
+            const [directoryViewMode, setDirectoryViewMode] = useState(() => sessionStorage.getItem('otp_dir_view') || 'list'); // 'list' or 'tier'
             const [targetMonth, setTargetMonth] = useState(() => {
                 const stored = sessionStorage.getItem('otp_target_month');
                 if (stored) return stored;
@@ -282,6 +283,22 @@
 
             useEffect(() => { sessionStorage.setItem('otp_sub_tab', memberSubTab); }, [memberSubTab]);
             useEffect(() => { sessionStorage.setItem('otp_target_month', targetMonth); }, [targetMonth]);
+            useEffect(() => { sessionStorage.setItem('otp_dir_view', directoryViewMode); }, [directoryViewMode]);
+
+            const membersByTier = useMemo(() => {
+                const grouped = {};
+                activeMembers.forEach(m => {
+                    const lvl = parseInt(m.level) || 0;
+                    if (!grouped[lvl]) grouped[lvl] = [];
+                    grouped[lvl].push(m);
+                });
+                return Object.keys(grouped)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map(lvl => ({
+                        level: lvl,
+                        members: grouped[lvl].sort((a,b) => a.name.localeCompare(b.name))
+                    }));
+            }, [activeMembers]);
 
             const filteredMonthlyMembers = useMemo(() => {
                 let list = [...activeMembers].sort((a,b)=>a.name.localeCompare(b.name));
@@ -738,6 +755,40 @@
                     return () => unsubMonthly();
                 }
             }, [targetMonth]);
+
+            // 공통 회원 카드 렌더링 함수
+            const renderMemberCard = (m, isCompact = false) => (
+                <div key={m.id} className={`bg-white ${isCompact ? 'p-3 rounded-xl' : 'p-5 sm:p-6 rounded-[32px]'} border border-slate-100 shadow-sm relative group hover:shadow-md transition-all text-left`}>
+                    <div className={`flex ${isCompact ? 'items-center gap-3' : 'items-start gap-4'} text-left`}>
+                        <div className={`flex-shrink-0 ${isCompact ? 'w-10 h-10 text-base' : 'w-12 h-12 sm:w-14 sm:h-14 text-lg sm:text-xl'} rounded-full flex items-center justify-center font-black shadow-lg ${getGenderPastelClass(m.gender)}`}>{m.level}</div>
+                        <div className="flex flex-col min-w-0 flex-1">
+                            <div className={`flex items-center justify-between w-full ${isCompact ? 'mb-0.5' : 'mb-1.5'}`}>
+                                <h3 className={`${isCompact ? 'text-sm sm:text-base' : 'text-xl sm:text-2xl'} font-black text-slate-900 whitespace-nowrap flex-shrink-0 mr-2`}>{m.name}</h3>
+                                {!isCompact && (
+                                    <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                        <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.Edit size={14}/></button>
+                                        <button onClick={() => {
+                                            setResigningMember(m);
+                                            setResignForm({ date: new Date().toISOString().split('T')[0], reason: '', isForced: false });
+                                        }} className="text-slate-400 hover:text-orange-500 bg-slate-50 hover:bg-orange-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.UserMinus size={14}/></button>
+                                        <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.Trash size={14}/></button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className={`flex flex-nowrap items-center gap-1 w-full overflow-x-auto no-scrollbar whitespace-nowrap ${isCompact ? '' : 'pb-1'}`}>
+                                <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
+                                {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
+                                {!isCompact && m.coupleId && <span className="flex-shrink-0 inline-flex items-center gap-1 bg-pink-50 text-pink-500 px-2 py-0.5 rounded-full text-[10px] font-black border border-pink-100 shadow-sm"><Icon.Heart size={10} className="animate-pulse"/> {getCoupleName(m.coupleId)}</span>}
+                            </div>
+                            {!isCompact && (
+                                <div className="mt-1 whitespace-nowrap">
+                                    <span className="text-[11px] font-bold text-slate-400">{formatBirth(m.birth)}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
             
             return (
                 <div className="min-h-screen pb-40 text-slate-900">
@@ -800,46 +851,49 @@
                                     {/* 1. 회원 관리 */}
                                     {memberSubTab === 'directory' && (
                                         <div className="animate-fade-in">
-                                            <div className="flex justify-between items-center mb-6">
-                                                <p className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{activeMembers.length}</span>명의 회원이 있습니다.</p>
-                                                <button onClick={() => setIsAddMemberModalOpen(true)} className="px-6 py-2.5 rounded-2xl bg-blue-600 text-white font-black text-sm transition-all shadow-xl shadow-blue-100 flex items-center gap-2 active:scale-95"><Icon.UserPlus size={18}/>회원 등록</button>
+                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <p className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{activeMembers.length}</span>명의 회원</p>
+                                                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                                        <button onClick={() => setDirectoryViewMode('list')} className={`px-3 py-1.5 text-[10px] font-black rounded-md transition-all ${directoryViewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>가나다순</button>
+                                                        <button onClick={() => setDirectoryViewMode('tier')} className={`px-3 py-1.5 text-[10px] font-black rounded-md transition-all ${directoryViewMode === 'tier' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>티어별</button>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => setIsAddMemberModalOpen(true)} className="px-6 py-2.5 rounded-2xl bg-blue-600 text-white font-black text-sm transition-all shadow-xl shadow-blue-100 flex items-center gap-2 w-fit active:scale-95"><Icon.UserPlus size={18}/>회원 등록</button>
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-xs sm:text-sm text-left">
-                                                {activeMembers.sort((a,b)=>a.name.localeCompare(b.name)).map(m => (
-                                                    <div key={m.id} className="bg-white p-5 sm:p-6 rounded-[32px] border border-slate-100 shadow-sm relative group hover:shadow-md transition-all text-left">
-                                                        <div className="flex items-start gap-4 text-left">
-                                                            <div className={`flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-lg sm:text-xl font-black shadow-lg ${getGenderPastelClass(m.gender)}`}>{m.level}</div>
-                                                            <div className="flex flex-col min-w-0 flex-1">
-                                                                <div className="flex items-center justify-between w-full mb-1.5">
-                                                                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 whitespace-nowrap">{m.name}</h3>
-                                                                    <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                                                                        <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 p-1.5 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.Edit size={14}/></button>
-                                                                        <button onClick={() => {
-                                                                            setResigningMember(m);
-                                                                            setResignForm({ date: new Date().toISOString().split('T')[0], reason: '', isForced: false });
-                                                                        }} className="text-slate-400 hover:text-orange-500 p-1.5 bg-slate-50 hover:bg-orange-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.UserMinus size={14}/></button>
-                                                                        <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className="text-slate-400 hover:text-red-500 p-1.5 bg-slate-50 hover:bg-red-50 rounded-lg shadow-none outline-none border-none transition-all"><Icon.Trash size={14}/></button>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex flex-nowrap items-center gap-1.5 w-full overflow-x-auto no-scrollbar whitespace-nowrap pb-1">
-                                                                    <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
-                                                                    {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
-                                                                    {m.coupleId && <span className="flex-shrink-0 inline-flex items-center gap-1 bg-pink-50 text-pink-500 px-2 py-0.5 rounded-full text-[10px] font-black border border-pink-100 shadow-sm"><Icon.Heart size={10} className="animate-pulse"/> {getCoupleName(m.coupleId)}</span>}
-                                                                </div>
-                                                                <div className="mt-1 whitespace-nowrap">
-                                                                    <span className="text-[11px] font-bold text-slate-400">{formatBirth(m.birth)}</span>
-                                                                </div>
+                                            {directoryViewMode === 'list' ? (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-left text-xs sm:text-sm text-left">
+                                                    {activeMembers.sort((a,b)=>a.name.localeCompare(b.name)).map(m => renderMemberCard(m, false))}
+                                                    {activeMembers.length === 0 && (
+                                                        <div className="col-span-full py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                            등록된 활성 회원이 없습니다.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-8">
+                                                    {membersByTier.map(tier => (
+                                                        <div key={tier.level} className="bg-slate-50 rounded-[40px] p-5 sm:p-8 border border-slate-100 shadow-inner">
+                                                            <div className="flex items-center justify-between mb-5 pb-4 border-b-2 border-slate-200/60">
+                                                                <h4 className="text-xl font-black text-slate-800">
+                                                                    {tier.level}단계 
+                                                                    <span className="text-sm font-bold text-slate-400 ml-2">({Number(tier.level) <= 6 ? '남성' : '여성'})</span>
+                                                                </h4>
+                                                                <span className="text-xs font-black text-blue-600 bg-blue-100 px-3 py-1.5 rounded-xl shadow-sm">{tier.members.length}명</span>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 text-xs sm:text-sm text-left">
+                                                                {tier.members.map(m => renderMemberCard(m, true))}
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
-                                                {activeMembers.length === 0 && (
-                                                    <div className="col-span-full py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
-                                                        등록된 활성 회원이 없습니다.
-                                                    </div>
-                                                )}
-                                            </div>
+                                                    ))}
+                                                    {membersByTier.length === 0 && (
+                                                        <div className="py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                            등록된 활성 회원이 없습니다.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
