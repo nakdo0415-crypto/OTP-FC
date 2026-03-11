@@ -86,7 +86,7 @@
             padding-right: 1.25rem !important;
         }
 
-        /* 캡쳐 진행 중 라이브 DOM 레이아웃 강제 확장 및 흐려짐 방지 */
+        /* 캡쳐 진행 중 라이브 DOM 레이아 강제 확장 및 흐려짐 방지 */
         body.is-capturing {
             height: auto !important;
             min-height: 100vh !important;
@@ -136,7 +136,7 @@
             justify-content: center !important;
             line-height: 1 !important;
             padding-top: 0px !important;
-            padding-bottom: 3px !important; /* 2px(덜 올라감)와 4px(너무 올라감)의 완벽한 중간값 */
+            padding-bottom: 3px !important; 
         }
         body.is-capturing .type-badge {
             display: inline-flex !important;
@@ -236,6 +236,9 @@
             const [isSaving, setIsSaving] = useState(false);
             const [scheduleToDelete, setScheduleToDelete] = useState(null);
             
+            // --- 불러온 기록의 모임 날짜를 캡쳐 제목으로 띄우기 위한 상태 ---
+            const [loadedMeetingDate, setLoadedMeetingDate] = useState(null);
+
             // --- Edit Mode States ---
             const [isEditMode, setIsEditMode] = useState(false);
             const [selectedForSwap, setSelectedForSwap] = useState(null);
@@ -262,7 +265,7 @@
                 e.preventDefault();
                 const x = e.pageX - presetScrollRef.current.offsetLeft;
                 const walk = (x - presetDrag.current.startX) * 1.5;
-                if (Math.abs(walk) > 5) presetDrag.current.dragged = true; // 스크롤 이동이 감지되면 드래그로 판정
+                if (Math.abs(walk) > 5) presetDrag.current.dragged = true;
                 presetScrollRef.current.scrollLeft = presetDrag.current.scrollLeft - walk;
             };
 
@@ -270,7 +273,7 @@
                 courtCount: 3, matchDuration: 12, breakDuration: 3,
                 startTime: "08:00", endTime: "10:00",
                 fieldNames: ["1구장", "2구장", "3구장"], fieldTypes: ["6vs6", "6vs6", "6vs6"],
-                strictCourtSize: false // 추가: 인원수 맞춰 구장 배정 옵션
+                strictCourtSize: false
             });
 
             const splitTime = (timeStr) => {
@@ -339,6 +342,7 @@
                 setSchedule(savedData.schedule); setConfig(savedData.config);
                 setCompletedMatches(new Set(savedData.completedMatches || []));
                 setSelectedMyTeam(savedData.selectedMyTeam || null);
+                setLoadedMeetingDate(savedData.meetingDate || null); // 과거 기록의 모임일을 상태에 저장
                 setView('results'); setIsLoadModalOpen(false);
                 setIsEditMode(false);
                 setSelectedForSwap(null);
@@ -391,16 +395,13 @@
                 while (currentTime < limitTime) {
                     let usedInSession = new Set();
                     let sessionMatches = [];
-                    // 변경: 인원수 제약을 풀었으므로, 5vs5 구장을 우선 배정할 필요 없이 1구장부터 원래 순서대로 배정합니다.
                     let sessionCourts = Array.from({length: courtCount}, (_, i) => ({ idx: i, type: config.fieldTypes[i] || '6vs6' }));
 
                     for (let court of sessionCourts) {
                         const isSmall = court.type === "5vs5";
                         let candidates = teams.filter(t => !usedInSession.has(t));
                         
-                        // 추가: 인원수에 맞춰서 구장을 뛰게 하는 옵션이 켜져있을 경우
                         if (config.strictCourtSize && isSmall) {
-                            // 5vs5 구장에는 인원이 5명 이하인 팀만 배정
                             candidates = candidates.filter(t => teamSizes[t] <= 5);
                         }
 
@@ -453,6 +454,7 @@
                 }
                 setSchedule({ list: sessionList, stats: teamStats }); 
                 setCompletedMatches(new Set()); 
+                setLoadedMeetingDate(null); // 새로 생성시 로드된 날짜 초기화
                 setIsEditMode(false);
                 setSelectedForSwap(null);
                 setView('results');
@@ -516,38 +518,35 @@
                 }
             };
 
-            // 캡쳐 흐려짐 방지를 위한 초고화질 스케일업 및 애니메이션 원천 차단 로직
             const handleCapture = () => {
                 setIsCapturing(true);
                 
-                // body에 is-capturing 클래스를 추가하여 스크롤 제한 해제, 애니메이션 차단, 강제 데스크탑 너비 적용
                 document.body.classList.add('is-capturing');
 
-                // 모바일 브라우저가 CSS 변경(특히 애니메이션 중단)을 완벽히 렌더링하도록 1초(1000ms) 대기
                 setTimeout(async () => {
                     try {
                         const captureArea = document.getElementById('capture-area');
                         if (!captureArea) return;
 
                         const canvas = await window.html2canvas(captureArea, {
-                            scale: 3, // 화질 대폭 상승 (기존 2 -> 3)
+                            scale: 3, 
                             backgroundColor: '#f8fafc',
                             useCORS: true,
                             scrollY: 0,
-                            windowWidth: 800 // 강제 데스크탑 해상도 기준 렌더링
+                            windowWidth: 800
                         });
 
                         const image = canvas.toDataURL("image/png", 1.0);
                         const link = document.createElement("a");
                         link.href = image;
-                        const dateStr = confirmedData?.meetingDate || new Date().toISOString().split('T')[0];
+                        // 캡쳐 파일명도 불러온 기록의 날짜로 맞춤 적용
+                        const dateStr = loadedMeetingDate || confirmedData?.meetingDate || new Date().toISOString().split('T')[0];
                         link.download = `OTP_FC_매치표_${dateStr}.png`;
                         link.click();
                     } catch (error) {
                         console.error("Capture failed:", error);
                         alert("캡쳐에 실패했습니다. 다시 시도해주세요.");
                     } finally {
-                        // 캡쳐 완료 후 원상 복구
                         document.body.classList.remove('is-capturing');
                         setIsCapturing(false);
                     }
@@ -683,7 +682,6 @@
                                                 )}
                                             </div>
                                             
-                                            {/* 추가: 구장 규격 인원수 맞춤 옵션 체크박스 */}
                                             <label className="flex items-center gap-2 mt-1 p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all select-none">
                                                 <input 
                                                     type="checkbox" 
@@ -703,9 +701,9 @@
                             </div>
                         ) : view === 'results' ? (
                             <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 px-2 sm:px-3 pt-2 pb-16 ${isCapturing ? 'capture-mode' : 'animate-fade-in'}`}>
-                                {/* 캡쳐 시에만 나타나는 상단 헤더 */}
+                                {/* 과거 기록을 불러온 경우 해당 모임 날짜를 캡쳐 상단에 띄우도록 수정 */}
                                 <div className="capture-header">
-                                    OTP FC 매치 테이블 ({confirmedData?.meetingDate || new Date().toLocaleDateString()})
+                                    OTP FC 매치 테이블 ({loadedMeetingDate || confirmedData?.meetingDate || new Date().toLocaleDateString()})
                                 </div>
                                 
                                 <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print no-capture ${isCapturing ? 'static' : 'sticky top-0 z-40'}`}>
@@ -911,7 +909,11 @@
                                     {savedSchedules.length === 0 ? (<div className="py-12 text-center text-slate-300 font-black text-sm">저장된 기록이 없습니다.</div>) : (
                                         savedSchedules.map(s => (
                                             <div key={s.id} onClick={() => loadMatchSchedule(s)} className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-400 transition-all cursor-pointer flex justify-between items-center">
-                                                <div className="text-left"><p className="text-[10px] font-black text-indigo-500 mb-0.5">{s.createdAt.split('T')[0]}</p><p className="text-sm font-black text-slate-800 leading-tight">{s.label}</p></div>
+                                                {/* 날짜 표시를 명확하게: '모임일'을 크게 표시하고 '저장일'을 작게 분리 */}
+                                                <div className="text-left">
+                                                    <p className="text-[12px] font-black text-indigo-600 mb-0.5">{s.meetingDate || '날짜 미상'} 모임</p>
+                                                    <p className="text-[10px] font-bold text-slate-500 leading-tight">저장일: {new Date(s.createdAt).toLocaleDateString()} · {s.schedule?.list?.length || 0}세션</p>
+                                                </div>
                                                 <button onClick={(e) => { e.stopPropagation(); setScheduleToDelete(s.id); }} className="p-2 text-slate-300 hover:text-rose-500"><Icon.Trash size={14}/></button>
                                             </div>
                                         ))
