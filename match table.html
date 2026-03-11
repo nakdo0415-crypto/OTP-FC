@@ -3,9 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f8fafc">
+    
     <title>OTP FC Match Master</title>
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Esamanru', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -16,24 +33,43 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <style>
+        /* 팀 메이커 시스템 폰트 로직 반영 */
         @font-face {
             font-family: 'Esamanru';
             src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicMedium.woff') format('woff');
-            font-weight: normal; font-style: normal;
+            font-weight: normal;
+            font-style: normal;
         }
         @font-face {
             font-family: 'Esamanru';
             src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicBold.woff') format('woff');
-            font-weight: 700; font-style: normal;
+            font-weight: 700;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicLight.woff') format('woff');
+            font-weight: 300;
+            font-style: normal;
         }
 
         body { 
-            font-family: 'Esamanru', sans-serif; 
+            font-family: 'Esamanru', sans-serif !important; 
             background-color: #f8fafc; 
             -webkit-tap-highlight-color: transparent;
             letter-spacing: -0.04em;
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: none;
+            -webkit-font-smoothing: antialiased;
+            touch-action: manipulation;
+            user-select: none;
         }
+
+        .animate-zoom-in { animation: zoomIn 0.2s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        button:active { transform: scale(0.95); opacity: 0.8; }
         
         .font-black { font-weight: 700; }
         .font-bold { font-weight: 500; }
@@ -41,10 +77,9 @@
         .results-list { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; }
 
         .match-row { 
-            animation: fadeIn 0.3s ease-out;
             display: flex; align-items: stretch;
             background: white; padding: 0.35rem;
-            border-radius: 0.75rem;
+            border-radius: 1rem;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
             border: 1px solid #e2e8f0;
             transition: all 0.2s ease;
@@ -56,9 +91,6 @@
         .match-row:active { transform: scale(0.995); background-color: #f1f5f9; }
         .match-completed { background-color: #f1f5f9; border-color: #cbd5e1; opacity: 0.5; }
         .match-completed .strikethrough { text-decoration: line-through; text-decoration-thickness: 1.5px; color: #94a3b8 !important; }
-
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
         
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -68,25 +100,23 @@
             -webkit-appearance: none;
             margin: 0;
         }
-        input[type="number"] { -moz-appearance: textfield; }
-
-        select, input { 
-            outline: none; transition: all 0.2s; 
+        input[type="number"], input[type="date"], input[type="text"], select { 
+            outline: none; transition: border-color 0.2s; 
             border: 1px solid #e2e8f0 !important;
             font-family: 'Esamanru', sans-serif;
             appearance: none;
         }
-        select:focus, input:focus { border-color: #4f46e5 !important; ring: 2px solid rgba(79, 70, 229, 0.1); }
+        select:focus, input:focus { border-color: #3b82f6 !important; ring: 2px solid rgba(59, 130, 246, 0.1); }
 
         select {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
             background-repeat: no-repeat;
-            background-position: right 0.4rem center;
-            background-size: 0.7rem;
-            padding-right: 1.25rem !important;
+            background-position: right 0.75rem center;
+            background-size: 1rem;
+            padding-right: 2rem !important;
         }
 
-        /* 캡쳐 진행 중 라이브 DOM 레이아 강제 확장 및 흐려짐 방지 */
+        /* 캡쳐 진행 중 라이브 DOM 레이아웃 강제 확장 및 흐려짐 방지 */
         body.is-capturing {
             height: auto !important;
             min-height: 100vh !important;
@@ -104,6 +134,7 @@
         body.is-capturing .sticky {
             position: static !important; /* 고정 요소 해제 */
         }
+        body.is-capturing nav,
         body.is-capturing header,
         body.is-capturing footer,
         body.is-capturing .no-capture {
@@ -153,11 +184,11 @@
             text-align: center;
             font-size: 1.8rem;
             font-weight: 900;
-            color: #4f46e5;
+            color: #2563eb;
             margin-bottom: 1.5rem;
             padding-top: 1rem;
             padding-bottom: 1rem;
-            border-bottom: 3px dashed #c7d2fe;
+            border-bottom: 3px dashed #bfdbfe;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
@@ -200,11 +231,11 @@
         }
 
         const Icon = {
-            Home: ({size=20}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
-            Clock: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+            Home: ({size=20}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+            Clock: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth="2"/><polyline points="12 6 12 12 16 14" strokeWidth="2"/></svg>,
             Court: ({size=20}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v4m-7 0V10m14 0v4M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>,
             Settings: ({size=20}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
-            Check: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>,
+            Check: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
             Star: ({size=14}) => <svg width={size} height={size} fill="currentColor" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>,
             Chart: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>,
             List: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>,
@@ -214,7 +245,7 @@
             Download: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>,
             Plus: ({size=14}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>,
             Minus: ({size=14}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"/></svg>,
-            Camera: ({size=16}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            Camera: ({size=18}) => <svg width={size} height={size} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         };
 
         function App() {
@@ -235,6 +266,9 @@
             const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
             const [isSaving, setIsSaving] = useState(false);
             const [scheduleToDelete, setScheduleToDelete] = useState(null);
+            
+            // --- 불러온 기록의 모임 날짜를 캡쳐 제목으로 띄우기 위한 상태 ---
+            const [loadedMeetingDate, setLoadedMeetingDate] = useState(null);
 
             // --- Edit Mode States ---
             const [isEditMode, setIsEditMode] = useState(false);
@@ -267,7 +301,7 @@
             };
 
             const [config, setConfig] = useState({
-                meetingDate: new Date().toISOString().split('T')[0], // 추가: 사용자가 직접 지정 가능한 날짜 상태
+                meetingDate: new Date().toISOString().split('T')[0], 
                 courtCount: 3, matchDuration: 12, breakDuration: 3,
                 startTime: "08:00", endTime: "10:00",
                 fieldNames: ["1구장", "2구장", "3구장"], fieldTypes: ["6vs6", "6vs6", "6vs6"],
@@ -312,7 +346,6 @@
                         const latest = drafts.filter(d => d.isConfirmed === true).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
                         if (latest) {
                             setConfirmedData(latest);
-                            // 새로운 출석 기록이 로드될 때, 모임 날짜 자동 동기화
                             if (latest.meetingDate) {
                                 setConfig(prev => ({ ...prev, meetingDate: latest.meetingDate }));
                             }
@@ -335,8 +368,8 @@
                     await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('match_schedules').add({
                         schedule, config, completedMatches: Array.from(completedMatches),
                         selectedMyTeam, createdAt: new Date().toISOString(),
-                        meetingDate: config.meetingDate, // 수정한 날짜를 저장
-                        label: `${config.meetingDate} 매치 (${schedule.list.length}세션)` // 직관적인 라벨
+                        meetingDate: config.meetingDate, 
+                        label: `${config.meetingDate} 매치 (${schedule.list.length}세션)` 
                     });
                     alert('매치 테이블이 성공적으로 저장되었습니다.');
                 } catch (e) { console.error(e); } finally { setIsSaving(false); }
@@ -350,6 +383,7 @@
                 });
                 setCompletedMatches(new Set(savedData.completedMatches || []));
                 setSelectedMyTeam(savedData.selectedMyTeam || null);
+                setLoadedMeetingDate(savedData.meetingDate || null); 
                 setView('results'); setIsLoadModalOpen(false);
                 setIsEditMode(false);
                 setSelectedForSwap(null);
@@ -461,6 +495,7 @@
                 }
                 setSchedule({ list: sessionList, stats: teamStats }); 
                 setCompletedMatches(new Set()); 
+                setLoadedMeetingDate(null); 
                 setIsEditMode(false);
                 setSelectedForSwap(null);
                 setView('results');
@@ -545,7 +580,6 @@
                         const image = canvas.toDataURL("image/png", 1.0);
                         const link = document.createElement("a");
                         link.href = image;
-                        // 사용자 지정 날짜(config.meetingDate)를 파일명으로 사용
                         const dateStr = config.meetingDate;
                         link.download = `OTP_FC_매치표_${dateStr}.png`;
                         link.click();
@@ -577,108 +611,106 @@
                 return { matchupCounts, fieldUsage, totalMatches, teams };
             }, [schedule, confirmedData, config.courtCount]);
 
-            if (loading) return (<div className="h-screen flex flex-col items-center justify-center text-slate-400"><div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>);
+            if (loading) return (<div className="h-screen flex flex-col items-center justify-center text-slate-400"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>);
 
             return (
-                <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-left">
-                    <header className="bg-white border-b px-4 py-2 sm:py-3 shadow-sm z-50 shrink-0 no-print flex flex-col sm:flex-row justify-between items-center gap-2">
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <button 
-                                onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} 
-                                className="p-2 mr-1 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 border border-slate-200 transition-all active:scale-95"
-                                title="홈으로 이동"
-                            >
-                                <Icon.Home size={18} />
-                            </button>
-                            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md"><Icon.Court size={16} /></div>
-                            <div className="leading-none text-left"><h1 className="text-base sm:text-lg font-black text-indigo-600 uppercase">Match Master</h1></div>
+                <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-left text-slate-900">
+                    <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b z-50 h-16 sm:h-20 flex items-center px-4 shadow-sm text-slate-900 transition-all shrink-0 no-print">
+                        <div className="max-w-5xl mx-auto w-full flex justify-between items-center text-left">
+                            <div className="flex items-center gap-1 sm:gap-2">
+                                <button 
+                                    onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} 
+                                    className="p-2.5 mr-1 sm:mr-2 rounded-xl transition-all bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center shadow-none border-none outline-none"
+                                    title="홈으로 이동"
+                                >
+                                    <Icon.Home size={18} />
+                                </button>
+                                
+                                <button onClick={() => { setView('setup'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-3 sm:px-6 py-2 rounded-xl font-black text-xs sm:text-base transition-all ${view === 'setup' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>설정</button>
+                                <button onClick={() => { setView('results'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-3 sm:px-6 py-2 rounded-xl font-black text-xs sm:text-base transition-all ${view === 'results' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>매치표</button>
+                                <button onClick={() => { setView('stats'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-3 sm:px-6 py-2 rounded-xl font-black text-xs sm:text-base transition-all ${view === 'stats' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>통계</button>
+                            </div>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                                {schedule.list.length > 0 && (
+                                    <button onClick={saveMatchSchedule} disabled={isSaving} className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all shadow-none border-none outline-none active:scale-95" title="저장">
+                                        <Icon.Save size={18} />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                            {schedule.list.length > 0 && (
-                                <div className="flex items-center gap-1.5">
-                                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0">
-                                        <button onClick={() => { setView('results'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'results' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.List size={12} /> 매치표</button>
-                                        <button onClick={() => { setView('stats'); setIsEditMode(false); setSelectedForSwap(null); }} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1.5 ${view === 'stats' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><Icon.Chart size={12} /> 통계</button>
-                                    </div>
-                                    <button onClick={saveMatchSchedule} disabled={isSaving} className="p-2 bg-green-50 text-green-600 border border-green-200 rounded-xl active:scale-95 transition-all"><Icon.Save size={16}/></button>
-                                </div>
-                            )}
-                            <button onClick={() => { setView('setup'); setIsEditMode(false); setSelectedForSwap(null); }} className={`p-2 border rounded-xl transition-all active:scale-95 ${view === 'setup' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-400'}`}><Icon.Settings size={18} /></button>
-                        </div>
-                    </header>
+                    </nav>
 
-                    <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50" id="main-scroll">
+                    <main className="flex-1 overflow-y-auto no-scrollbar bg-slate-50 w-full" id="main-scroll">
                         {view === 'setup' ? (
-                            <div className="max-w-md mx-auto py-4 px-2 sm:px-3 animate-fade-in text-left pb-16">
-                                <div className="mb-4 flex gap-2">
-                                    <button onClick={() => setIsLoadModalOpen(true)} className="flex-1 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all">
-                                        <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center"><Icon.Download size={14}/></div>
-                                        <p className="text-[12px] font-black text-slate-800">기록 불러오기</p>
+                            <div className="max-w-5xl mx-auto py-6 px-4 sm:px-8 animate-zoom-in text-left pb-20">
+                                <div className="mb-6 flex gap-2">
+                                    <button onClick={() => setIsLoadModalOpen(true)} className="flex-1 py-4 bg-white border border-slate-200 rounded-[24px] shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all outline-none">
+                                        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><Icon.Download size={18}/></div>
+                                        <p className="text-sm font-black text-slate-800">과거 기록 불러오기</p>
                                     </button>
                                 </div>
-                                <div className="bg-white rounded-[24px] p-5 sm:p-6 shadow-xl border border-slate-100">
-                                    <h2 className="text-xl font-black text-slate-800 mb-6 text-center">Settings</h2>
-                                    <div className="space-y-5">
-                                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-4">
-                                            <h3 className="text-[11px] font-black text-slate-800 uppercase">1. 기본 설정</h3>
+                                
+                                <div className="bg-white rounded-[40px] p-6 sm:p-10 shadow-sm border border-slate-100 mb-8 text-left">
+                                    <h2 className="text-2xl font-black text-slate-800 mb-8 text-center uppercase tracking-tighter">Settings</h2>
+                                    <div className="space-y-6">
+                                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-5">
+                                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">1. 기본 설정</h3>
                                             
-                                            {/* 수정: 모임 날짜 선택 달력 추가 (여기서 날짜를 선택하면 저장 시 해당 날짜로 저장됩니다.) */}
-                                            <div className="flex flex-col gap-1 text-left pb-2 border-b border-slate-200/60">
-                                                <label className="text-[9px] font-black text-indigo-600 ml-1">모임 날짜 (매치표 제목)</label>
+                                            <div className="flex flex-col gap-1 text-left pb-4 border-b border-slate-200/60">
+                                                <label className="text-[10px] font-black text-blue-600 ml-1 uppercase">모임 날짜 (매치표 제목)</label>
                                                 <input 
                                                     type="date" 
-                                                    className="w-full bg-white border border-slate-200 p-2 rounded-lg font-black text-xs text-center shadow-sm" 
+                                                    className="w-full bg-white border border-slate-200 p-4 rounded-2xl font-black text-sm text-center shadow-sm outline-none" 
                                                     value={config.meetingDate} 
                                                     onChange={e => setConfig(prev => ({...prev, meetingDate: e.target.value}))}
                                                 />
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-3 mt-1">
-                                                <div className="space-y-1 text-left"><span className="text-[9px] font-black text-slate-500 ml-1">시작</span><div className="flex gap-1">
-                                                    <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.startTime).h} onChange={e => setConfig({...config, startTime: `${e.target.value}:${splitTime(config.startTime).m}`})}>{hoursList.map(h => <option key={h} value={h}>{h}시</option>)}</select>
-                                                    <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.startTime).m} onChange={e => setConfig({...config, startTime: `${splitTime(config.startTime).h}:${e.target.value}`})}>{minutesList.map(m => <option key={m} value={m}>{m}분</option>)}</select>
+                                            <div className="grid grid-cols-2 gap-4 mt-2">
+                                                <div className="space-y-1 text-left"><span className="text-[10px] font-black text-slate-500 ml-1 uppercase">시작</span><div className="flex gap-2">
+                                                    <select className="flex-1 bg-white p-3 sm:p-4 rounded-2xl font-black text-xs outline-none border-none shadow-sm" value={splitTime(config.startTime).h} onChange={e => setConfig({...config, startTime: `${e.target.value}:${splitTime(config.startTime).m}`})}>{hoursList.map(h => <option key={h} value={h}>{h}시</option>)}</select>
+                                                    <select className="flex-1 bg-white p-3 sm:p-4 rounded-2xl font-black text-xs outline-none border-none shadow-sm" value={splitTime(config.startTime).m} onChange={e => setConfig({...config, startTime: `${splitTime(config.startTime).h}:${e.target.value}`})}>{minutesList.map(m => <option key={m} value={m}>{m}분</option>)}</select>
                                                 </div></div>
-                                                <div className="space-y-1 text-left"><span className="text-[9px] font-black text-rose-500 ml-1">종료</span><div className="flex gap-1">
-                                                    <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.endTime).h} onChange={e => setConfig({...config, endTime: `${e.target.value}:${splitTime(config.endTime).m}`})}>{hoursList.map(h => <option key={h} value={h}>{h}시</option>)}</select>
-                                                    <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.endTime).m} onChange={e => setConfig({...config, endTime: `${splitTime(config.endTime).h}:${e.target.value}`})}>{minutesList.map(m => <option key={m} value={m}>{m}분</option>)}</select>
+                                                <div className="space-y-1 text-left"><span className="text-[10px] font-black text-rose-500 ml-1 uppercase">종료</span><div className="flex gap-2">
+                                                    <select className="flex-1 bg-white p-3 sm:p-4 rounded-2xl font-black text-xs outline-none border-none shadow-sm" value={splitTime(config.endTime).h} onChange={e => setConfig({...config, endTime: `${e.target.value}:${splitTime(config.endTime).m}`})}>{hoursList.map(h => <option key={h} value={h}>{h}시</option>)}</select>
+                                                    <select className="flex-1 bg-white p-3 sm:p-4 rounded-2xl font-black text-xs outline-none border-none shadow-sm" value={splitTime(config.endTime).m} onChange={e => setConfig({...config, endTime: `${splitTime(config.endTime).h}:${e.target.value}`})}>{minutesList.map(m => <option key={m} value={m}>{m}분</option>)}</select>
                                                 </div></div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="flex flex-col gap-1"><label className="text-[9px] font-black text-slate-500 ml-1">경기 (분)</label><input type="number" className="w-full bg-white border border-slate-200 p-2 rounded-lg font-black text-center text-xs" value={config.matchDuration} onChange={e => setConfig({...config, matchDuration: parseInt(e.target.value)})}/></div>
-                                                <div className="flex flex-col gap-1"><label className="text-[9px] font-black text-slate-500 ml-1">휴식 (분)</label><input type="number" className="w-full bg-white border border-slate-200 p-2 rounded-lg font-black text-center text-xs" value={config.breakDuration} onChange={e => setConfig({...config, breakDuration: parseInt(e.target.value)})}/></div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="flex flex-col gap-1"><label className="text-[10px] font-black text-slate-500 ml-1 uppercase">경기 (분)</label><input type="number" className="w-full bg-white border border-slate-200 p-4 rounded-2xl font-black text-center text-sm shadow-sm outline-none" value={config.matchDuration} onChange={e => setConfig({...config, matchDuration: parseInt(e.target.value)})}/></div>
+                                                <div className="flex flex-col gap-1"><label className="text-[10px] font-black text-slate-500 ml-1 uppercase">휴식 (분)</label><input type="number" className="w-full bg-white border border-slate-200 p-4 rounded-2xl font-black text-center text-sm shadow-sm outline-none" value={config.breakDuration} onChange={e => setConfig({...config, breakDuration: parseInt(e.target.value)})}/></div>
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex justify-between items-center px-1"><h3 className="text-[11px] font-black text-slate-800 uppercase">2. 메인 구장</h3><button onClick={openPresetModal} className="px-2 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-lg">+ 추가</button></div>
+                                        <div className="flex flex-col gap-3 mt-4">
+                                            <div className="flex justify-between items-center px-1"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">2. 메인 구장</h3><button onClick={openPresetModal} className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-black rounded-xl outline-none">+ 추가</button></div>
                                             
-                                            {/* 가로 스크롤 가능하도록 마우스 드래그 이벤트 추가 */}
                                             <div 
-                                                className="flex gap-2 overflow-x-auto no-scrollbar pb-1 cursor-grab active:cursor-grabbing"
+                                                className="flex gap-2 overflow-x-auto no-scrollbar pb-2 cursor-grab active:cursor-grabbing"
                                                 ref={presetScrollRef}
                                                 onMouseDown={handlePresetMouseDown}
                                                 onMouseLeave={handlePresetMouseLeave}
                                                 onMouseUp={handlePresetMouseUp}
                                                 onMouseMove={handlePresetMouseMove}
                                             >
-                                                <button onClick={() => { if(presetDrag.current.dragged) return; setSelectedPresetId('manual') }} className={`shrink-0 px-4 py-2 rounded-xl font-black text-[11px] border-2 transition-all ${selectedPresetId === 'manual' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>직접 입력</button>
+                                                <button onClick={() => { if(presetDrag.current.dragged) return; setSelectedPresetId('manual') }} className={`shrink-0 px-5 py-3 rounded-2xl font-black text-xs border-2 transition-all outline-none ${selectedPresetId === 'manual' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>직접 입력</button>
                                                 {presets.map(p => (
-                                                    <div key={p.id} className={`flex shrink-0 items-center bg-white rounded-xl border-2 overflow-hidden ${selectedPresetId === p.id ? 'border-indigo-600' : 'border-slate-200'}`}>
-                                                        <button onClick={() => { if(presetDrag.current.dragged) return; handlePresetSelect(p) }} className={`px-4 py-2 font-black text-[11px] ${selectedPresetId === p.id ? 'bg-indigo-600 text-white' : 'text-slate-700'}`}>{p.name}</button>
-                                                        <button onClick={(e) => { e.stopPropagation(); if(presetDrag.current.dragged) return; setPresetToDelete(p.id); }} className={`px-2 py-2 text-rose-400 border-l border-slate-100 active:bg-rose-50`}><Icon.Trash size={12} /></button>
+                                                    <div key={p.id} className={`flex shrink-0 items-center bg-white rounded-2xl border-2 overflow-hidden transition-all shadow-sm ${selectedPresetId === p.id ? 'border-blue-600 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-200'}`}>
+                                                        <button onClick={() => { if(presetDrag.current.dragged) return; handlePresetSelect(p) }} className={`px-5 py-3 font-black text-xs outline-none transition-colors ${selectedPresetId === p.id ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-50'}`}>{p.name}</button>
+                                                        <button onClick={(e) => { e.stopPropagation(); if(presetDrag.current.dragged) return; setPresetToDelete(p.id); }} className={`px-3 py-3 text-rose-400 border-l border-slate-100 hover:bg-rose-50 hover:text-rose-600 transition-colors outline-none`}><Icon.Trash size={14} /></button>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
 
                                         {selectedPresetId !== 'manual' && (
-                                            <div className="flex flex-col gap-3 animate-fade-in bg-indigo-50 p-4 rounded-2xl border border-indigo-100 shadow-inner">
-                                                <h3 className="text-[11px] font-black text-indigo-900 uppercase">3. 세부 구장 선택</h3>
-                                                <div className="flex flex-wrap gap-1.5">
+                                            <div className="flex flex-col gap-3 animate-fade-in bg-blue-50/50 p-5 rounded-3xl border border-blue-100 shadow-inner mt-2">
+                                                <h3 className="text-xs font-black text-blue-900 uppercase tracking-widest">3. 세부 구장 선택</h3>
+                                                <div className="flex flex-wrap gap-2">
                                                     {presets.find(p => p.id === selectedPresetId)?.fieldNames.map((name, i) => {
                                                         const on = presetToggles[i];
                                                         return (
-                                                            <button key={i} onClick={() => handleToggleSubCourt(i)} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] border transition-colors ${on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-slate-200'}`}>
+                                                            <button key={i} onClick={() => handleToggleSubCourt(i)} className={`px-4 py-2 rounded-xl font-black text-xs border transition-all outline-none shadow-sm ${on ? 'bg-blue-600 text-white border-blue-600 scale-105' : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300 hover:text-blue-500'}`}>
                                                                 {name}
                                                             </button>
                                                         )
@@ -687,83 +719,81 @@
                                             </div>
                                         )}
 
-                                        <div className="flex flex-col gap-2">
-                                            <h3 className="text-[11px] font-black text-slate-800 uppercase px-1">4. 최종 운영 구장 ({config.courtCount}개)</h3>
-                                            <div className="grid grid-cols-2 gap-2 animate-fade-in bg-slate-100 p-2 rounded-2xl shadow-inner">
-                                                {config.courtCount === 0 ? ( <div className="col-span-2 text-center py-4 text-slate-400 font-bold text-[10px]">구장을 선택해주세요.</div> ) : (
+                                        <div className="flex flex-col gap-3 mt-6">
+                                            <h3 className="text-xs font-black text-slate-800 uppercase px-1 tracking-widest">4. 최종 운영 구장 ({config.courtCount}개)</h3>
+                                            <div className="grid grid-cols-2 gap-3 animate-fade-in bg-slate-100 p-3 rounded-3xl shadow-inner">
+                                                {config.courtCount === 0 ? ( <div className="col-span-2 text-center py-6 text-slate-400 font-bold text-xs">구장을 선택해주세요.</div> ) : (
                                                     config.fieldNames.map((name, i) => (
-                                                        <div key={i} className="flex flex-col items-center justify-center py-2 px-1 bg-white border border-slate-200 rounded-xl gap-1 shadow-sm">
-                                                            <span className="font-black text-[11px] text-slate-800 text-center leading-tight truncate w-full px-1">{name}</span>
-                                                            <span className={`text-[8px] font-black px-1 rounded-sm border ${config.fieldTypes[i] === '5vs5' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-indigo-50 text-indigo-500 border-indigo-100'}`}>{config.fieldTypes[i]}</span>
+                                                        <div key={i} className="flex flex-col items-center justify-center py-3 px-2 bg-white border border-slate-200 rounded-2xl gap-1.5 shadow-sm">
+                                                            <span className="font-black text-sm text-slate-800 text-center leading-tight truncate w-full px-1">{name}</span>
+                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${config.fieldTypes[i] === '5vs5' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-blue-50 text-blue-500 border-blue-100'}`}>{config.fieldTypes[i]}</span>
                                                         </div>
                                                     ))
                                                 )}
                                             </div>
                                             
-                                            {/* 커스텀 UI로 변경하여 체크 상태를 더 직관적이고 확실하게 표시 */}
                                             <div 
-                                                className={`flex items-center gap-2.5 mt-1 p-3 rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all select-none border ${config.strictCourtSize ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}
+                                                className={`flex items-center gap-3 mt-2 p-4 rounded-2xl cursor-pointer shadow-sm active:scale-[0.98] transition-all select-none border ${config.strictCourtSize ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-100' : 'bg-white border-slate-200 hover:border-blue-200'}`}
                                                 onClick={() => setConfig(prev => ({...prev, strictCourtSize: !prev.strictCourtSize}))}
                                             >
-                                                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all ${config.strictCourtSize ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-50 border border-slate-300 text-transparent'}`}>
-                                                    <Icon.Check size={14} />
+                                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all ${config.strictCourtSize ? 'bg-blue-600 text-white shadow-inner scale-110' : 'bg-slate-50 border border-slate-300 text-transparent'}`}>
+                                                    <Icon.Check size={16} />
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className={`text-[11px] font-black leading-tight ${config.strictCourtSize ? 'text-indigo-900' : 'text-slate-800'}`}>구장 규격에 인원수 엄격히 맞춤</span>
-                                                    <span className={`text-[9px] font-bold mt-0.5 ${config.strictCourtSize ? 'text-indigo-600' : 'text-slate-400'}`}>체크 시 5vs5 구장에 6명 이상 팀 제외</span>
+                                                    <span className={`text-xs font-black leading-tight ${config.strictCourtSize ? 'text-blue-900' : 'text-slate-800'}`}>구장 규격에 인원수 엄격히 맞춤</span>
+                                                    <span className={`text-[10px] font-bold mt-1 ${config.strictCourtSize ? 'text-blue-600' : 'text-slate-400'}`}>체크 시 5vs5 구장에 6명 이상 팀 배정 제외</span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button onClick={generateMatchTable} disabled={config.courtCount === 0} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-base active:scale-95 transition-all disabled:opacity-50">매치 테이블 생성</button>
+                                    <button onClick={generateMatchTable} disabled={config.courtCount === 0} className="w-full mt-10 py-5 bg-slate-900 text-white rounded-[32px] font-black text-lg active:scale-95 transition-all shadow-xl shadow-slate-200 uppercase disabled:opacity-50 disabled:cursor-not-allowed outline-none">매치 테이블 생성</button>
                                 </div>
                             </div>
                         ) : view === 'results' ? (
-                            <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 px-2 sm:px-3 pt-2 pb-16 ${isCapturing ? 'capture-mode' : 'animate-fade-in'}`}>
-                                {/* 수정된 날짜 연동 적용 */}
+                            <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-2 px-2 sm:px-4 pt-4 pb-20 ${isCapturing ? 'capture-mode' : 'animate-fade-in'}`}>
                                 <div className="capture-header">
                                     OTP FC 매치 테이블 ({config.meetingDate})
                                 </div>
                                 
-                                <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print no-capture ${isCapturing ? 'static' : 'sticky top-0 z-40'}`}>
-                                    <div className="flex flex-wrap items-center justify-between gap-1">
-                                        <div className="flex flex-wrap items-center gap-1">
-                                            <button onClick={() => setSelectedMyTeam(null)} className={`px-2.5 py-1.5 rounded-lg font-black text-[10px] transition-all ${selectedMyTeam === null ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>전체보기</button>
+                                <div className={`bg-white p-3 rounded-2xl border border-slate-200 shadow-sm no-print no-capture ${isCapturing ? 'static' : 'sticky top-4 z-40'}`}>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <button onClick={() => setSelectedMyTeam(null)} className={`px-3 py-2 rounded-xl font-black text-[11px] sm:text-xs transition-all outline-none ${selectedMyTeam === null ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>전체보기</button>
                                             {confirmedData?.teams.map((t, i) => {
                                                 const name = String.fromCharCode(65 + i);
                                                 const on = selectedMyTeam === name;
                                                 return (
-                                                    <button key={name} onClick={() => setSelectedMyTeam(name)} className={`px-2 py-1.5 rounded-lg font-black text-[10px] flex items-center gap-1 transition-all ${on ? 'ring-2 ring-slate-900/10 scale-105 z-10' : 'opacity-80 grayscale-[30%]'}`} style={{ backgroundColor: getTeamBaseColor(i), color: (name === 'C' || name === 'D') ? '#1e293b' : 'white' }}>
-                                                        {on && <Icon.Star size={10}/>}<span>{name}({t.members.length})</span>
+                                                    <button key={name} onClick={() => setSelectedMyTeam(name)} className={`px-3 py-2 rounded-xl font-black text-[11px] sm:text-xs flex items-center gap-1.5 transition-all outline-none ${on ? 'ring-2 ring-slate-900/10 scale-105 z-10 shadow-lg' : 'opacity-70 grayscale-[50%] hover:grayscale-0 hover:opacity-100'}`} style={{ backgroundColor: getTeamBaseColor(i), color: (name === 'C' || name === 'D') ? '#1e293b' : 'white' }}>
+                                                        {on && <Icon.Star size={12}/>}<span>{name}({t.members.length})</span>
                                                     </button>
                                                 );
                                             })}
                                         </div>
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-2 mt-2 sm:mt-0 w-full sm:w-auto justify-end">
                                             <button 
                                                 onClick={handleCapture} 
                                                 disabled={isCapturing}
-                                                className="px-3 py-1.5 rounded-lg font-black text-[10px] transition-all border bg-slate-800 text-white border-slate-800 hover:bg-slate-700 flex items-center gap-1 shrink-0 shadow-md active:scale-95"
+                                                className="px-4 py-2 rounded-xl font-black text-xs transition-all border bg-slate-900 text-white border-slate-900 hover:bg-slate-800 flex items-center gap-1.5 shrink-0 shadow-md active:scale-95 outline-none"
                                             >
-                                                {isCapturing ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Icon.Camera size={12} />}
+                                                {isCapturing ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Icon.Camera size={14} />}
                                                 캡쳐
                                             </button>
                                             <button 
                                                 onClick={() => { setIsEditMode(!isEditMode); setSelectedForSwap(null); }} 
-                                                className={`px-3 py-1.5 rounded-lg font-black text-[10px] transition-all border shrink-0 ${isEditMode ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                className={`px-4 py-2 rounded-xl font-black text-xs transition-all border shrink-0 outline-none ${isEditMode ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                                             >
                                                 {isEditMode ? '수정 완료' : '매치 수정'}
                                             </button>
                                         </div>
                                     </div>
                                     {isEditMode && (
-                                        <div className="mt-2 p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-center text-[10px] font-black shadow-inner">
+                                        <div className="mt-3 p-2.5 bg-blue-50 text-blue-600 rounded-xl text-center text-[11px] sm:text-xs font-black shadow-inner border border-blue-100">
                                             변경할 두 팀을 차례로 클릭하여 교체하세요 (같은 경기 내에서만 가능)
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="results-list px-0.5">
+                                <div className="results-list px-1 mt-2">
                                     {schedule?.list?.map((session) => {
                                         const done = completedMatches.has(session.id);
                                         let matches = session.matches;
@@ -772,59 +802,60 @@
                                         if (selectedMyTeam && matches.length === 0 && !resting) return null;
 
                                         return (
-                                            <div key={session.id} onClick={() => !isEditMode && toggleMatchCompletion(session.id)} className={`match-row gap-1.5 ${done ? 'match-completed' : (isEditMode && !isCapturing ? 'border-indigo-100 bg-slate-50 ring-1 ring-indigo-50' : 'hover:border-indigo-300')}`}>
-                                                <div className="flex flex-col items-center justify-center pr-1.5 border-r border-slate-200 min-w-[65px] shrink-0 text-center">
-                                                    <span className="text-[12px] sm:text-[14px] font-black text-black leading-none mb-1">{session.id}경기</span>
+                                            <div key={session.id} onClick={() => !isEditMode && toggleMatchCompletion(session.id)} className={`match-row gap-2 ${done ? 'match-completed' : (isEditMode && !isCapturing ? 'border-blue-200 bg-slate-50 ring-2 ring-blue-50' : 'hover:border-blue-300 hover:shadow-md')}`}>
+                                                <div className="flex flex-col items-center justify-center pr-2 border-r border-slate-200 min-w-[75px] sm:min-w-[85px] shrink-0 text-center">
+                                                    <span className="text-sm sm:text-base font-black text-slate-900 leading-none mb-1.5">{session.id}경기</span>
                                                     <div className={`flex flex-col items-center ${done && !isEditMode ? 'strikethrough opacity-60' : ''}`}>
-                                                        <span className="text-[11px] sm:text-[12px] font-black text-blue-600 leading-none">{session.startTime}</span>
-                                                        <span className="text-[11px] sm:text-[12px] font-black text-blue-600 leading-none mt-1">{session.endTime}</span>
+                                                        <span className="text-xs sm:text-sm font-black text-blue-600 leading-none">{session.startTime}</span>
+                                                        <span className="text-xs sm:text-sm font-black text-blue-600 leading-none mt-1">{session.endTime}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex-1 min-w-0">
+                                                <div className="flex-1 min-w-0 py-0.5">
                                                     {resting && !isEditMode ? (
-                                                        <div className="flex items-center justify-center h-full"><div className="bg-amber-50 text-amber-600 px-3 py-1 rounded-lg font-black text-[10px] italic">휴식 중</div></div>
+                                                        <div className="flex items-center justify-center h-full"><div className="bg-orange-50 text-orange-600 px-4 py-2 rounded-xl font-black text-xs italic shadow-inner border border-orange-100">휴식 중</div></div>
                                                     ) : (
-                                                        <div className="flex flex-row flex-nowrap gap-1 w-full h-full">
+                                                        <div className="flex flex-row flex-nowrap gap-1.5 w-full h-full">
                                                             {matches.map((m, idx) => {
                                                                 const courtCount = matches.length;
-                                                                const iconSize = courtCount > 4 ? 'w-6 h-6' : courtCount > 2 ? 'w-7 h-7' : 'w-8 h-8';
-                                                                const labelSize = courtCount > 4 ? 'text-[12px]' : 'text-[14px]';
+                                                                const iconSize = courtCount > 4 ? 'w-7 h-7' : courtCount > 2 ? 'w-8 h-8' : 'w-10 h-10';
+                                                                const labelSize = courtCount > 4 ? 'text-xs' : 'text-sm';
+                                                                const textSize = courtCount > 4 ? 'text-xs' : 'text-sm';
                                                                 
                                                                 const isSmall = config.fieldTypes[m.fieldIdx] === '5vs5';
-                                                                const typeColor = isSmall ? 'text-rose-500' : 'text-indigo-500';
-                                                                const typeBg = isSmall ? 'bg-rose-50' : 'bg-indigo-50';
+                                                                const typeColor = isSmall ? 'text-rose-600' : 'text-blue-600';
+                                                                const typeBg = isSmall ? 'bg-rose-100' : 'bg-blue-100';
 
                                                                 return (
-                                                                    <div key={idx} className="flex-1 min-w-0 flex flex-col bg-white border-x border-slate-100 first:border-l-0 last:border-r-0 items-center justify-center py-0.5 relative rounded-md">
-                                                                        <div className="flex items-center justify-center gap-1 mb-1 w-full px-1">
+                                                                    <div key={idx} className="flex-1 min-w-0 flex flex-col bg-white border border-slate-100 shadow-sm items-center justify-center py-1.5 px-0.5 relative rounded-xl">
+                                                                        <div className="flex items-center justify-center gap-1.5 mb-1.5 w-full px-1">
                                                                             <span className={`${labelSize} font-black text-slate-900 leading-tight break-keep text-center truncate`}>
                                                                                 {config.fieldNames[m.fieldIdx] || `${m.fieldIdx+1}구장`}
                                                                             </span>
-                                                                            <span className={`type-badge inline-flex items-center justify-center text-[8px] font-black px-1.5 py-[2px] rounded-full ${typeBg} ${typeColor} tracking-tighter shrink-0 leading-none`}>
+                                                                            <span className={`type-badge inline-flex items-center justify-center text-[9px] font-black px-2 py-0.5 rounded-md ${typeBg} ${typeColor} tracking-tighter shrink-0 leading-none`}>
                                                                                 {config.fieldTypes[m.fieldIdx]}
                                                                             </span>
                                                                         </div>
-                                                                        <div className="flex items-center justify-center gap-0.5 w-full">
-                                                                            <div 
+                                                                        <div className="flex items-center justify-center gap-1 w-full px-1">
+                                                                            <button 
                                                                                 onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 0, m.match[0])}
-                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all leading-none
+                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-lg ${textSize} font-black shadow-md transition-all leading-none outline-none border-none
                                                                                 ${getTeamStyles(m.match[0].charCodeAt(0)-65)} 
-                                                                                ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
-                                                                                ${selectedMyTeam && m.match[0] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
-                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-indigo-400' : ''}
-                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[0] && !isCapturing ? 'ring-2 ring-indigo-500 scale-110 z-10 shadow-lg' : ''}
-                                                                                `}>{m.match[0]}</div>
-                                                                            <span className="text-[7px] font-black text-slate-300 italic px-0.5">vs</span>
-                                                                            <div 
+                                                                                ${done && !isEditMode ? 'grayscale opacity-30 shadow-none' : ''} 
+                                                                                ${selectedMyTeam && m.match[0] !== selectedMyTeam && !isEditMode ? 'opacity-40 shadow-none' : ''}
+                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-110 hover:ring-4 hover:ring-blue-300 hover:shadow-lg' : ''}
+                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[0] && !isCapturing ? 'ring-4 ring-blue-500 scale-110 z-10 shadow-xl' : ''}
+                                                                                `}>{m.match[0]}</button>
+                                                                            <span className="text-[9px] font-black text-slate-300 italic px-0.5 uppercase">vs</span>
+                                                                            <button 
                                                                                 onClick={(e) => handleTeamClick(e, session.id, m.fieldIdx, 1, m.match[1])}
-                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-md text-[11px] font-black shadow-sm transition-all leading-none
+                                                                                className={`team-badge ${iconSize} flex items-center justify-center rounded-lg ${textSize} font-black shadow-md transition-all leading-none outline-none border-none
                                                                                 ${getTeamStyles(m.match[1].charCodeAt(0)-65)} 
-                                                                                ${done && !isEditMode ? 'grayscale opacity-30' : ''} 
-                                                                                ${selectedMyTeam && m.match[1] !== selectedMyTeam && !isEditMode ? 'opacity-40' : ''}
-                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-indigo-400' : ''}
-                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[1] && !isCapturing ? 'ring-2 ring-indigo-500 scale-110 z-10 shadow-lg' : ''}
-                                                                                `}>{m.match[1]}</div>
+                                                                                ${done && !isEditMode ? 'grayscale opacity-30 shadow-none' : ''} 
+                                                                                ${selectedMyTeam && m.match[1] !== selectedMyTeam && !isEditMode ? 'opacity-40 shadow-none' : ''}
+                                                                                ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-110 hover:ring-4 hover:ring-blue-300 hover:shadow-lg' : ''}
+                                                                                ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === m.match[1] && !isCapturing ? 'ring-4 ring-blue-500 scale-110 z-10 shadow-xl' : ''}
+                                                                                `}>{m.match[1]}</button>
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -834,19 +865,19 @@
                                                 </div>
 
                                                 {(!selectedMyTeam || isEditMode) && session.resting.length > 0 && (
-                                                    <div className={`flex flex-col items-center justify-center pl-1 border-l shrink-0 h-full gap-0.5 ${isEditMode ? 'border-indigo-100 bg-indigo-50/30 w-[45px]' : 'border-slate-100 w-[40px]'}`}>
-                                                        <span className="text-[6px] font-black uppercase text-amber-500">Rest</span>
-                                                        <div className="flex flex-wrap justify-center gap-1 w-full">
+                                                    <div className={`flex flex-col items-center justify-center pl-2 border-l shrink-0 h-full gap-1 sm:w-[55px] ${isEditMode ? 'border-blue-100 bg-blue-50/50 w-[55px]' : 'border-slate-100 w-[50px]'}`}>
+                                                        <span className="text-[8px] font-black uppercase text-orange-500 tracking-widest">Rest</span>
+                                                        <div className="flex flex-wrap justify-center gap-1.5 w-full px-0.5">
                                                             {session.resting.map(t => (
-                                                                <span 
+                                                                <button 
                                                                     key={t} 
                                                                     onClick={(e) => handleTeamClick(e, session.id, null, null, t, true)}
-                                                                    className={`team-badge w-4 h-4 flex items-center justify-center rounded-sm font-black text-[9px] transition-all leading-none
+                                                                    className={`team-badge w-5 h-5 flex items-center justify-center rounded-md font-black text-[10px] transition-all leading-none outline-none shadow-sm border-none
                                                                     ${getTeamStyles(t.charCodeAt(0)-65)} 
-                                                                    ${done && !isEditMode ? 'grayscale opacity-30' : ''}
-                                                                    ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-110 hover:ring-2 hover:ring-indigo-400' : ''}
-                                                                    ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === t && !isCapturing ? 'ring-2 ring-indigo-500 scale-125 z-10 shadow-lg' : ''}
-                                                                    `}>{t}</span>
+                                                                    ${done && !isEditMode ? 'grayscale opacity-30 shadow-none' : ''}
+                                                                    ${isEditMode && !isCapturing ? 'cursor-pointer hover:scale-125 hover:ring-2 hover:ring-blue-300 hover:shadow-md z-10' : ''}
+                                                                    ${selectedForSwap?.sessionId === session.id && selectedForSwap?.teamName === t && !isCapturing ? 'ring-2 ring-blue-500 scale-125 z-20 shadow-lg' : ''}
+                                                                    `}>{t}</button>
                                                             ))}
                                                         </div>
                                                     </div>
@@ -857,35 +888,35 @@
                                 </div>
                             </div>
                         ) : (
-                            <div className="w-full max-w-[1200px] mx-auto flex flex-col gap-4 animate-fade-in pb-16 px-2 sm:px-3 pt-4">
-                                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 text-center">
-                                    <h3 className="text-sm font-black text-slate-800 mb-3 flex items-center justify-center gap-2 uppercase tracking-widest"><Icon.Chart size={16}/> 팀별 총 경기 수</h3>
-                                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                            <div className="max-w-5xl mx-auto py-6 px-4 sm:px-8 animate-zoom-in text-left pb-20">
+                                <div className="bg-white rounded-[40px] p-6 sm:p-8 shadow-sm border border-slate-100 text-center mb-6">
+                                    <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center justify-center gap-2 uppercase tracking-widest"><Icon.Chart size={18} className="text-blue-500"/> 팀별 총 경기 수</h3>
+                                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                                         {statsData?.teams.map((t) => (
-                                            <div key={t} className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                                                <span className={`team-badge w-8 h-8 flex items-center justify-center rounded-md font-black text-lg mx-auto mb-1 leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span>
-                                                <div className="text-lg font-black text-slate-800">{statsData.totalMatches[t]}</div>
+                                            <div key={t} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 shadow-inner flex flex-col items-center">
+                                                <span className={`team-badge w-10 h-10 flex items-center justify-center rounded-xl font-black text-xl mb-2 shadow-sm leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span>
+                                                <div className="text-2xl font-black text-slate-800 tabular-nums">{statsData.totalMatches[t]}<span className="text-[10px] text-slate-400 ml-1">MATCH</span></div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
-                                        <h3 className="text-[11px] font-black text-slate-800 mb-3 uppercase">구장 사용 빈도</h3>
-                                        <div className="overflow-x-auto no-scrollbar rounded-xl border border-slate-100">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <div className="bg-white rounded-[40px] p-6 sm:p-8 shadow-sm border border-slate-100">
+                                        <h3 className="text-xs font-black text-slate-800 mb-5 uppercase tracking-widest text-center">구장 사용 빈도</h3>
+                                        <div className="overflow-x-auto no-scrollbar rounded-3xl border border-slate-100 shadow-inner bg-slate-50">
                                             <table className="w-full text-center border-separate border-spacing-0">
                                                 <thead>
-                                                    <tr className="text-[9px] font-black text-slate-400 uppercase bg-slate-50">
-                                                        <th className="py-2 px-2 text-left">Team</th>
-                                                        {Array.from({ length: config.courtCount }).map((_, i) => (<th key={i} className="py-2 px-1 whitespace-nowrap">{config.fieldNames[i] || `${i+1}구`}</th>))}
+                                                    <tr className="text-[10px] font-black text-slate-500 uppercase">
+                                                        <th className="py-4 px-4 text-left border-b border-slate-200">Team</th>
+                                                        {Array.from({ length: config.courtCount }).map((_, i) => (<th key={i} className="py-4 px-2 whitespace-nowrap border-b border-slate-200">{config.fieldNames[i] || `${i+1}구`}</th>))}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {statsData?.teams.map(t => (
-                                                        <tr key={t} className="hover:bg-slate-50 border-t border-slate-100">
-                                                            <td className="py-2 px-2 text-left"><span className={`team-badge inline-flex items-center justify-center px-2 py-1 rounded-md font-black text-[10px] leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
+                                                        <tr key={t} className="hover:bg-white transition-colors">
+                                                            <td className="py-3 px-4 text-left border-b border-slate-100 last:border-0"><span className={`team-badge inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-black text-[11px] shadow-sm leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
                                                             {Array.from({ length: config.courtCount }).map((_, i) => (
-                                                                <td key={i} className={`py-2 px-1 font-black text-[11px] ${statsData.fieldUsage[t][i] === 0 ? 'text-slate-200' : 'text-slate-800'}`}>{statsData.fieldUsage[t][i]}</td>
+                                                                <td key={i} className={`py-3 px-2 font-black text-sm border-b border-slate-100 last:border-0 ${statsData.fieldUsage[t][i] === 0 ? 'text-slate-300' : 'text-slate-800'}`}>{statsData.fieldUsage[t][i]}</td>
                                                             ))}
                                                         </tr>
                                                     ))}
@@ -893,21 +924,21 @@
                                             </table>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
-                                        <h3 className="text-[11px] font-black text-slate-800 mb-3 uppercase">상대 팀 매칭 횟수</h3>
-                                        <div className="overflow-x-auto no-scrollbar rounded-xl border border-slate-100">
+                                    <div className="bg-white rounded-[40px] p-6 sm:p-8 shadow-sm border border-slate-100">
+                                        <h3 className="text-xs font-black text-slate-800 mb-5 uppercase tracking-widest text-center">상대 팀 매칭 횟수</h3>
+                                        <div className="overflow-x-auto no-scrollbar rounded-3xl border border-slate-100 shadow-inner bg-slate-50">
                                             <table className="w-full text-center border-separate border-spacing-0">
                                                 <thead>
-                                                    <tr className="text-[9px] font-black text-slate-400 uppercase bg-slate-50">
-                                                        <th className="py-2 px-2 text-left">Team</th>
-                                                        {statsData?.teams.map(t => ( <th key={t} className="py-2 px-1">{t}</th> ))}
+                                                    <tr className="text-[10px] font-black text-slate-500 uppercase">
+                                                        <th className="py-4 px-4 text-left border-b border-slate-200">Team</th>
+                                                        {statsData?.teams.map(t => ( <th key={t} className="py-4 px-2 border-b border-slate-200">{t}</th> ))}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {statsData?.teams.map(t => (
-                                                        <tr key={t} className="hover:bg-slate-50 border-t border-slate-100">
-                                                            <td className="py-2 px-2 text-left"><span className={`team-badge inline-flex items-center justify-center px-2 py-1 rounded-md font-black text-[10px] leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
-                                                            {statsData?.teams.map(opp => (<td key={opp} className={`py-2 px-1 font-black text-[11px] ${t === opp ? 'bg-slate-50 text-slate-300' : (statsData.matchupCounts[t][opp] === 0 ? 'text-slate-200' : 'text-slate-800')}`}>{t === opp ? '-' : statsData.matchupCounts[t][opp]}</td>))}
+                                                        <tr key={t} className="hover:bg-white transition-colors">
+                                                            <td className="py-3 px-4 text-left border-b border-slate-100 last:border-0"><span className={`team-badge inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-black text-[11px] shadow-sm leading-none ${getTeamStyles(t.charCodeAt(0)-65)}`}>{t}</span></td>
+                                                            {statsData?.teams.map(opp => (<td key={opp} className={`py-3 px-2 font-black text-sm border-b border-slate-100 last:border-0 ${t === opp ? 'bg-slate-100 text-slate-300' : (statsData.matchupCounts[t][opp] === 0 ? 'text-slate-300' : 'text-slate-800')}`}>{t === opp ? '-' : statsData.matchupCounts[t][opp]}</td>))}
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -921,63 +952,65 @@
 
                     {/* --- Modals --- */}
                     {isLoadModalOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" onClick={() => setIsLoadModalOpen(false)}>
-                            <div className="bg-white rounded-[24px] p-6 w-full max-w-md shadow-2xl animate-fade-in max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                                <h3 className="font-black text-lg mb-4 text-slate-800 text-center">기록 불러오기</h3>
-                                <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 mb-6">
-                                    {savedSchedules.length === 0 ? (<div className="py-12 text-center text-slate-300 font-black text-sm">저장된 기록이 없습니다.</div>) : (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4" onClick={() => setIsLoadModalOpen(false)}>
+                            <div className="bg-white rounded-[48px] p-8 sm:p-10 w-full max-w-md shadow-2xl animate-zoom-in max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                                <h3 className="font-black text-2xl mb-8 text-slate-800 text-center tracking-tighter uppercase">기록 불러오기</h3>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4 mb-8">
+                                    {savedSchedules.length === 0 ? (<div className="py-16 text-center text-slate-400 font-bold text-sm bg-slate-50 rounded-3xl border border-dashed border-slate-200">저장된 기록이 없습니다.</div>) : (
                                         savedSchedules.map(s => (
-                                            <div key={s.id} onClick={() => loadMatchSchedule(s)} className="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-400 transition-all cursor-pointer flex justify-between items-center">
-                                                {/* 날짜 표시를 명확하게: '모임일'을 크게 표시하고 '저장일'을 작게 분리 */}
+                                            <div key={s.id} onClick={() => loadMatchSchedule(s)} className="p-5 bg-slate-50 border-2 border-slate-100 rounded-[24px] hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer flex justify-between items-center active:scale-95 shadow-sm">
                                                 <div className="text-left">
-                                                    <p className="text-[12px] font-black text-indigo-600 mb-0.5">{s.meetingDate || '날짜 미상'} 모임</p>
-                                                    <p className="text-[10px] font-bold text-slate-500 leading-tight">저장일: {new Date(s.createdAt).toLocaleDateString()} · {s.schedule?.list?.length || 0}세션</p>
+                                                    <p className="text-base font-black text-blue-600 mb-1">{s.meetingDate || '날짜 미상'} 모임</p>
+                                                    <p className="text-[10px] font-bold text-slate-500 leading-tight tracking-wide">저장일: {new Date(s.createdAt).toLocaleDateString()} · {s.schedule?.list?.length || 0}세션</p>
                                                 </div>
-                                                <button onClick={(e) => { e.stopPropagation(); setScheduleToDelete(s.id); }} className="p-2 text-slate-300 hover:text-rose-500"><Icon.Trash size={14}/></button>
+                                                <button onClick={(e) => { e.stopPropagation(); setScheduleToDelete(s.id); }} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors outline-none border-none"><Icon.Trash size={18}/></button>
                                             </div>
                                         ))
                                     )}
-                                </div><button onClick={() => setIsLoadModalOpen(false)} className="w-full py-3 bg-slate-100 text-slate-500 font-black rounded-xl text-sm">닫기</button>
+                                </div>
+                                <button onClick={() => setIsLoadModalOpen(false)} className="w-full py-5 bg-slate-100 text-slate-500 font-black rounded-3xl text-sm shadow-none active:scale-95 transition-all outline-none border-none uppercase">닫기</button>
                             </div>
                         </div>
                     )}
 
                     {scheduleToDelete && (
-                        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[10000] flex items-center justify-center p-4" onClick={() => setScheduleToDelete(null)}>
-                            <div className="bg-white rounded-2xl p-6 w-full max-sm text-center" onClick={e => e.stopPropagation()}>
-                                <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4"><Icon.Trash size={22} /></div>
-                                <h3 className="font-black text-lg mb-1">기록 삭제</h3>
-                                <div className="flex gap-2 mt-6"><button onClick={() => setScheduleToDelete(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-black rounded-xl text-xs">취소</button><button onClick={async () => { try { await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('match_schedules').doc(scheduleToDelete).delete(); setScheduleToDelete(null); } catch (e) { console.error(e); } }} className="flex-1 py-3 bg-rose-500 text-white font-black rounded-xl text-xs active:scale-95 transition-all">삭제</button></div>
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[10000] flex items-center justify-center p-4" onClick={() => setScheduleToDelete(null)}>
+                            <div className="bg-white rounded-[48px] p-10 w-full max-w-sm shadow-2xl animate-zoom-in text-center" onClick={e => e.stopPropagation()}>
+                                <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><Icon.Trash size={32} /></div>
+                                <h3 className="font-black text-2xl mb-2 tracking-tighter text-slate-900">기록 삭제</h3>
+                                <p className="text-slate-500 font-bold mb-10 text-sm">해당 매치표 기록을 정말 삭제하시겠습니까?</p>
+                                <div className="flex gap-3 mt-6">
+                                    <button onClick={() => setScheduleToDelete(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 font-black rounded-3xl text-xs shadow-none active:scale-95 transition-all outline-none border-none uppercase">취소</button>
+                                    <button onClick={async () => { try { await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('match_schedules').doc(scheduleToDelete).delete(); setScheduleToDelete(null); } catch (e) { console.error(e); } }} className="flex-1 py-5 bg-rose-500 text-white font-black rounded-3xl text-xs active:scale-95 transition-all shadow-xl shadow-rose-100 outline-none border-none uppercase">삭제</button>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {isPresetModalOpen && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" onClick={() => setIsPresetModalOpen(false)}>
-                            <div className="bg-white rounded-[24px] p-6 w-full max-w-md shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto no-scrollbar" onClick={e => e.stopPropagation()}>
-                                <h3 className="font-black text-lg mb-4 text-slate-800 text-center">새 구장 추가</h3>
-                                <div className="space-y-4 mb-8">
-                                    <div className="flex flex-col gap-1 text-left"><label className="text-[9px] font-black text-slate-400 ml-1">풋살장 이름</label><input type="text" placeholder="예: HK풋살파크" className="w-full p-3 bg-slate-50 rounded-xl font-black text-sm border-none shadow-inner" value={presetForm.name} onChange={e => setPresetForm({...presetForm, name: e.target.value})} autoFocus /></div>
-                                    <div className="flex flex-col gap-1 text-left"><label className="text-[9px] font-black text-slate-400 ml-1">구장 개수</label><div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl shadow-inner"><button onClick={() => setPresetForm(prev => ({...prev, courtCount: Math.max(1, prev.courtCount-1)}))} className="w-8 h-8 bg-white rounded-lg flex items-center justify-center"><Icon.Minus size={12}/></button><div className="flex items-center gap-1 font-black text-slate-800">{presetForm.courtCount}<span className="text-[10px] text-slate-400 font-bold">개</span></div><button onClick={() => setPresetForm(prev => ({...prev, courtCount: prev.courtCount+1}))} className="w-8 h-8 bg-white rounded-lg flex items-center justify-center"><Icon.Plus size={12}/></button></div></div>
-                                    <div className="flex flex-col gap-1 text-left"><label className="text-[9px] font-black text-slate-400 ml-1">상세 정보</label><div className="grid grid-cols-1 gap-2 max-h-[150px] overflow-y-auto pr-1 no-scrollbar">{Array.from({ length: presetForm.courtCount }).map((_, i) => (<div key={i} className="flex gap-2 items-center bg-slate-50 p-1.5 rounded-xl border border-slate-100"><input type="text" className="flex-1 bg-white p-2 rounded-lg font-black text-xs border-none shadow-sm" value={presetForm.fieldNames[i] || ''} placeholder={`${i+1}번 구장`} onChange={(e) => { const n = [...presetForm.fieldNames]; n[i] = e.target.value; setPresetForm({...presetForm, fieldNames: n}); }}/><button onClick={() => { const t = [...presetForm.fieldTypes]; t[i] = t[i] === "6vs6" ? "5vs5" : "6vs6"; setPresetForm({...presetForm, fieldTypes: t}); }} className="px-2 py-2 rounded-lg font-black text-[10px] border-2 transition-all bg-white border-slate-200">{presetForm.fieldTypes[i] || '6vs6'}</button></div>))}</div></div>
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4" onClick={() => setIsPresetModalOpen(false)}>
+                            <div className="bg-white rounded-[48px] p-8 sm:p-10 w-full max-w-md shadow-2xl animate-zoom-in max-h-[90vh] overflow-y-auto no-scrollbar" onClick={e => e.stopPropagation()}>
+                                <h3 className="font-black text-2xl mb-8 text-slate-800 text-center tracking-tighter uppercase">새 구장 추가</h3>
+                                <div className="space-y-6 mb-10">
+                                    <div className="flex flex-col gap-1.5 text-left"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">풋살장 이름</label><input type="text" placeholder="예: HK풋살파크" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm border-2 border-transparent focus:border-blue-100 outline-none shadow-none" value={presetForm.name} onChange={e => setPresetForm({...presetForm, name: e.target.value})} autoFocus /></div>
+                                    <div className="flex flex-col gap-1.5 text-left"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">구장 개수</label><div className="flex items-center justify-between bg-slate-50 p-2 rounded-2xl border-2 border-transparent"><button onClick={() => setPresetForm(prev => ({...prev, courtCount: Math.max(1, prev.courtCount-1)}))} className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-600 hover:text-blue-600 outline-none border-none"><Icon.Minus size={16}/></button><div className="flex items-center gap-1 font-black text-slate-800 text-lg tabular-nums">{presetForm.courtCount}<span className="text-[10px] text-slate-400 font-bold ml-1">개</span></div><button onClick={() => setPresetForm(prev => ({...prev, courtCount: prev.courtCount+1}))} className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-600 hover:text-blue-600 outline-none border-none"><Icon.Plus size={16}/></button></div></div>
+                                    <div className="flex flex-col gap-1.5 text-left"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">상세 정보</label><div className="grid grid-cols-1 gap-3 max-h-[180px] overflow-y-auto pr-2 custom-scrollbar">{Array.from({ length: presetForm.courtCount }).map((_, i) => (<div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-2xl border-2 border-transparent focus-within:border-blue-100 transition-colors"><input type="text" className="flex-1 bg-white p-3 rounded-xl font-black text-xs border-none shadow-sm outline-none" value={presetForm.fieldNames[i] || ''} placeholder={`${i+1}번 구장`} onChange={(e) => { const n = [...presetForm.fieldNames]; n[i] = e.target.value; setPresetForm({...presetForm, fieldNames: n}); }}/><button onClick={() => { const t = [...presetForm.fieldTypes]; t[i] = t[i] === "6vs6" ? "5vs5" : "6vs6"; setPresetForm({...presetForm, fieldTypes: t}); }} className={`px-4 py-3 rounded-xl font-black text-xs transition-all shadow-sm outline-none border-none ${presetForm.fieldTypes[i] === '5vs5' ? 'bg-rose-50 text-rose-500' : 'bg-blue-50 text-blue-500'}`}>{presetForm.fieldTypes[i] || '6vs6'}</button></div>))}</div></div>
                                 </div>
-                                <div className="flex gap-2"><button onClick={() => setIsPresetModalOpen(false)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-black rounded-xl text-xs">취소</button><button onClick={async () => { if(!presetForm.name.trim()) return; await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('court_presets').add({ ...presetForm, fieldNames: presetForm.fieldNames.slice(0, presetForm.courtCount), fieldTypes: presetForm.fieldTypes.slice(0, presetForm.courtCount), createdAt: new Date().toISOString() }); setIsPresetModalOpen(false); }} disabled={!presetForm.name.trim()} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl text-xs shadow-lg">저장</button></div>
+                                <div className="flex gap-3"><button onClick={() => setIsPresetModalOpen(false)} className="flex-1 py-5 bg-slate-100 text-slate-500 font-black rounded-3xl text-xs shadow-none active:scale-95 transition-all outline-none border-none uppercase">취소</button><button onClick={async () => { if(!presetForm.name.trim()) return; await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('court_presets').add({ ...presetForm, fieldNames: presetForm.fieldNames.slice(0, presetForm.courtCount), fieldTypes: presetForm.fieldTypes.slice(0, presetForm.courtCount), createdAt: new Date().toISOString() }); setIsPresetModalOpen(false); }} disabled={!presetForm.name.trim()} className="flex-1 py-5 bg-blue-600 text-white font-black rounded-3xl text-xs shadow-xl shadow-blue-100 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed outline-none border-none uppercase">저장</button></div>
                             </div>
                         </div>
                     )}
 
                     {presetToDelete && (
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" onClick={() => setPresetToDelete(null)}><div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
-                            <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4"><Icon.Trash size={22} /></div>
-                            <h3 className="font-black text-base mb-1">프리셋 삭제</h3>
-                            <div className="flex gap-2 mt-4"><button onClick={() => setPresetToDelete(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-black rounded-xl text-xs">취소</button><button onClick={async () => { await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('court_presets').doc(presetToDelete).delete(); setPresetToDelete(null); }} className="flex-1 py-3 bg-rose-500 text-white font-black rounded-xl text-xs">삭제</button></div>
-                        </div></div>
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[10000] flex items-center justify-center p-4" onClick={() => setPresetToDelete(null)}>
+                            <div className="bg-white rounded-[48px] p-10 w-full max-w-sm shadow-2xl animate-zoom-in text-center" onClick={e => e.stopPropagation()}>
+                                <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><Icon.Trash size={32} /></div>
+                                <h3 className="font-black text-2xl mb-2 tracking-tighter text-slate-900">프리셋 삭제</h3>
+                                <p className="text-slate-500 font-bold mb-10 text-sm">해당 구장 프리셋을 정말 삭제하시겠습니까?</p>
+                                <div className="flex gap-3 mt-6"><button onClick={() => setPresetToDelete(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 font-black rounded-3xl text-xs shadow-none active:scale-95 transition-all outline-none border-none uppercase">취소</button><button onClick={async () => { await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('court_presets').doc(presetToDelete).delete(); setPresetToDelete(null); }} className="flex-1 py-5 bg-rose-500 text-white font-black rounded-3xl text-xs active:scale-95 transition-all shadow-xl shadow-rose-100 outline-none border-none uppercase">삭제</button></div>
+                            </div>
+                        </div>
                     )}
-                    
-                    <footer className="shrink-0 bg-white border-t px-4 py-2 flex flex-col xs:flex-row justify-between items-center gap-1 no-print">
-                        <div className="flex items-center gap-3 text-slate-400 text-[9px] font-black uppercase"><div className="flex items-center gap-1"><Icon.Users size={11}/> {confirmedData?.teams?.length || 0}개 팀</div><div className="w-px h-2 bg-slate-200"></div><div className="flex items-center gap-1"><Icon.Clock size={11}/> {config.matchDuration}분/{config.breakDuration}분</div></div>
-                        <div className="text-[9px] font-black text-indigo-300 uppercase">OTP FC Match Master</div>
-                    </footer>
                 </div>
             );
         }
