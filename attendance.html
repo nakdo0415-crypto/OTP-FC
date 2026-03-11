@@ -851,10 +851,17 @@
                                     )}
                                 </div>
 
-                                {isMeetingOver && !isAppLocked && (
+                                {isMeetingOver && !isAppLocked && activeParticipants.length > 0 && (
                                     <div className="mb-6 bg-purple-50 border-2 border-purple-200 p-6 rounded-[32px] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-zoom-in text-left">
                                         <div><p className="text-purple-700 font-black text-lg text-left">이번 모임이 종료되었습니다!</p><p className="text-purple-500 text-sm font-bold text-left">기록을 확정하면 출석하지 않은 분들은 <span className="text-red-600">'노쇼'</span>로 자동 체크됩니다.</p></div>
                                         <button onClick={saveAndResetCurrent} className="flex items-center gap-2 bg-purple-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:bg-purple-700 active:scale-95 transition-all shadow-rose-100 uppercase">Archive This Week</button>
+                                    </div>
+                                )}
+                                
+                                {isMeetingOver && !isAppLocked && activeParticipants.length === 0 && (
+                                    <div className="mb-6 bg-slate-50 border-2 border-slate-200 p-6 rounded-[32px] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-zoom-in text-left">
+                                        <div><p className="text-slate-700 font-black text-lg text-left">종료된 모임입니다.</p><p className="text-slate-500 text-sm font-bold text-left">다음 모임 일정을 [선정] 탭에서 설정해주세요.</p></div>
+                                        <button onClick={() => setView('setup')} className="flex items-center gap-2 whitespace-nowrap bg-slate-900 text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 active:scale-95 transition-all shadow-slate-200 uppercase text-sm">Setup Next Meeting</button>
                                     </div>
                                 )}
                                 
