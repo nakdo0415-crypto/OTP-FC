@@ -235,9 +235,6 @@
             const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
             const [isSaving, setIsSaving] = useState(false);
             const [scheduleToDelete, setScheduleToDelete] = useState(null);
-            
-            // --- 불러온 기록의 모임 날짜를 캡쳐 제목으로 띄우기 위한 상태 ---
-            const [loadedMeetingDate, setLoadedMeetingDate] = useState(null);
 
             // --- Edit Mode States ---
             const [isEditMode, setIsEditMode] = useState(false);
@@ -270,6 +267,7 @@
             };
 
             const [config, setConfig] = useState({
+                meetingDate: new Date().toISOString().split('T')[0], // 추가: 사용자가 직접 지정 가능한 날짜 상태
                 courtCount: 3, matchDuration: 12, breakDuration: 3,
                 startTime: "08:00", endTime: "10:00",
                 fieldNames: ["1구장", "2구장", "3구장"], fieldTypes: ["6vs6", "6vs6", "6vs6"],
@@ -312,7 +310,13 @@
                     if (!snap.empty) {
                         const drafts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                         const latest = drafts.filter(d => d.isConfirmed === true).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-                        if (latest) setConfirmedData(latest);
+                        if (latest) {
+                            setConfirmedData(latest);
+                            // 새로운 출석 기록이 로드될 때, 모임 날짜 자동 동기화
+                            if (latest.meetingDate) {
+                                setConfig(prev => ({ ...prev, meetingDate: latest.meetingDate }));
+                            }
+                        }
                     }
                 });
                 const unsubPresets = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('court_presets').onSnapshot(snap => {
@@ -331,18 +335,21 @@
                     await db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('match_schedules').add({
                         schedule, config, completedMatches: Array.from(completedMatches),
                         selectedMyTeam, createdAt: new Date().toISOString(),
-                        meetingDate: confirmedData?.meetingDate || 'Unknown Date',
-                        label: `${confirmedData?.meetingDate || '매치'} (${schedule.list.length}세션)`
+                        meetingDate: config.meetingDate, // 수정한 날짜를 저장
+                        label: `${config.meetingDate} 매치 (${schedule.list.length}세션)` // 직관적인 라벨
                     });
                     alert('매치 테이블이 성공적으로 저장되었습니다.');
                 } catch (e) { console.error(e); } finally { setIsSaving(false); }
             };
 
             const loadMatchSchedule = (savedData) => {
-                setSchedule(savedData.schedule); setConfig(savedData.config);
+                setSchedule(savedData.schedule); 
+                setConfig({
+                    ...savedData.config,
+                    meetingDate: savedData.meetingDate || savedData.config?.meetingDate || new Date().toISOString().split('T')[0]
+                });
                 setCompletedMatches(new Set(savedData.completedMatches || []));
                 setSelectedMyTeam(savedData.selectedMyTeam || null);
-                setLoadedMeetingDate(savedData.meetingDate || null); // 과거 기록의 모임일을 상태에 저장
                 setView('results'); setIsLoadModalOpen(false);
                 setIsEditMode(false);
                 setSelectedForSwap(null);
@@ -454,7 +461,6 @@
                 }
                 setSchedule({ list: sessionList, stats: teamStats }); 
                 setCompletedMatches(new Set()); 
-                setLoadedMeetingDate(null); // 새로 생성시 로드된 날짜 초기화
                 setIsEditMode(false);
                 setSelectedForSwap(null);
                 setView('results');
@@ -539,8 +545,8 @@
                         const image = canvas.toDataURL("image/png", 1.0);
                         const link = document.createElement("a");
                         link.href = image;
-                        // 캡쳐 파일명도 불러온 기록의 날짜로 맞춤 적용
-                        const dateStr = loadedMeetingDate || confirmedData?.meetingDate || new Date().toISOString().split('T')[0];
+                        // 사용자 지정 날짜(config.meetingDate)를 파일명으로 사용
+                        const dateStr = config.meetingDate;
                         link.download = `OTP_FC_매치표_${dateStr}.png`;
                         link.click();
                     } catch (error) {
@@ -614,9 +620,21 @@
                                     <h2 className="text-xl font-black text-slate-800 mb-6 text-center">Settings</h2>
                                     <div className="space-y-5">
                                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-4">
-                                            <h3 className="text-[11px] font-black text-slate-800 uppercase">1. 시간 설정</h3>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1 text-left"><span className="text-[9px] font-black text-indigo-500 ml-1">시작</span><div className="flex gap-1">
+                                            <h3 className="text-[11px] font-black text-slate-800 uppercase">1. 기본 설정</h3>
+                                            
+                                            {/* 수정: 모임 날짜 선택 달력 추가 (여기서 날짜를 선택하면 저장 시 해당 날짜로 저장됩니다.) */}
+                                            <div className="flex flex-col gap-1 text-left pb-2 border-b border-slate-200/60">
+                                                <label className="text-[9px] font-black text-indigo-600 ml-1">모임 날짜 (매치표 제목)</label>
+                                                <input 
+                                                    type="date" 
+                                                    className="w-full bg-white border border-slate-200 p-2 rounded-lg font-black text-xs text-center shadow-sm" 
+                                                    value={config.meetingDate} 
+                                                    onChange={e => setConfig(prev => ({...prev, meetingDate: e.target.value}))}
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mt-1">
+                                                <div className="space-y-1 text-left"><span className="text-[9px] font-black text-slate-500 ml-1">시작</span><div className="flex gap-1">
                                                     <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.startTime).h} onChange={e => setConfig({...config, startTime: `${e.target.value}:${splitTime(config.startTime).m}`})}>{hoursList.map(h => <option key={h} value={h}>{h}시</option>)}</select>
                                                     <select className="flex-1 bg-white p-2 rounded-lg font-black text-[11px]" value={splitTime(config.startTime).m} onChange={e => setConfig({...config, startTime: `${splitTime(config.startTime).h}:${e.target.value}`})}>{minutesList.map(m => <option key={m} value={m}>{m}분</option>)}</select>
                                                 </div></div>
@@ -682,18 +700,19 @@
                                                 )}
                                             </div>
                                             
-                                            <label className="flex items-center gap-2 mt-1 p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all select-none">
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 accent-indigo-600"
-                                                    checked={config.strictCourtSize || false}
-                                                    onChange={e => setConfig({...config, strictCourtSize: e.target.checked})}
-                                                />
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-black text-slate-800 leading-tight">구장 규격에 인원수 엄격히 맞춤</span>
-                                                    <span className="text-[8px] font-bold text-slate-400 mt-0.5">체크 시 5vs5 구장에 6명 이상인 팀 배정 제외</span>
+                                            {/* 커스텀 UI로 변경하여 체크 상태를 더 직관적이고 확실하게 표시 */}
+                                            <div 
+                                                className={`flex items-center gap-2.5 mt-1 p-3 rounded-xl cursor-pointer shadow-sm active:scale-95 transition-all select-none border ${config.strictCourtSize ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}
+                                                onClick={() => setConfig(prev => ({...prev, strictCourtSize: !prev.strictCourtSize}))}
+                                            >
+                                                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all ${config.strictCourtSize ? 'bg-indigo-600 text-white shadow-inner' : 'bg-slate-50 border border-slate-300 text-transparent'}`}>
+                                                    <Icon.Check size={14} />
                                                 </div>
-                                            </label>
+                                                <div className="flex flex-col">
+                                                    <span className={`text-[11px] font-black leading-tight ${config.strictCourtSize ? 'text-indigo-900' : 'text-slate-800'}`}>구장 규격에 인원수 엄격히 맞춤</span>
+                                                    <span className={`text-[9px] font-bold mt-0.5 ${config.strictCourtSize ? 'text-indigo-600' : 'text-slate-400'}`}>체크 시 5vs5 구장에 6명 이상 팀 제외</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <button onClick={generateMatchTable} disabled={config.courtCount === 0} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-base active:scale-95 transition-all disabled:opacity-50">매치 테이블 생성</button>
@@ -701,9 +720,9 @@
                             </div>
                         ) : view === 'results' ? (
                             <div id="capture-area" className={`w-full max-w-[1600px] mx-auto flex flex-col gap-1.5 px-2 sm:px-3 pt-2 pb-16 ${isCapturing ? 'capture-mode' : 'animate-fade-in'}`}>
-                                {/* 과거 기록을 불러온 경우 해당 모임 날짜를 캡쳐 상단에 띄우도록 수정 */}
+                                {/* 수정된 날짜 연동 적용 */}
                                 <div className="capture-header">
-                                    OTP FC 매치 테이블 ({loadedMeetingDate || confirmedData?.meetingDate || new Date().toLocaleDateString()})
+                                    OTP FC 매치 테이블 ({config.meetingDate})
                                 </div>
                                 
                                 <div className={`bg-white p-2 rounded-xl border border-slate-200 shadow-sm no-print no-capture ${isCapturing ? 'static' : 'sticky top-0 z-40'}`}>
