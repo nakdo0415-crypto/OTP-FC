@@ -223,7 +223,8 @@
             Upload: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
             Check: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
             Folder: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
-            RotateCcw: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            RotateCcw: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+            MapPin: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         };
 
         function App() {
@@ -235,6 +236,7 @@
             
             const [meetingDate, setMeetingDate] = useState('');
             const [meetingTime, setMeetingTime] = useState({ start: '', end: '' }); 
+            const [meetingLocation, setMeetingLocation] = useState('');
             const [syncManagerName, setSyncManagerName] = useState('');
             const [maxMemberLimit, setMaxMemberLimit] = useState(18); // Default limit
 
@@ -323,18 +325,28 @@
                 if (!user) return;
                 const unsubMembers = getCol('members').onSnapshot(snap => setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
                 const unsubSession = getCol('weekly_session').onSnapshot(snap => setSessionData(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-                const unsubSettings = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('settings').doc('meeting_time').onSnapshot(doc => {
-                    if (doc.exists) {
-                        const data = doc.data();
-                        setMeetingDate(data.date || "");
-                        setMeetingTime({ start: data.start || "", end: data.end || "" });
-                        setSyncManagerName(data.managerName || "");
+                const unsubSettings = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('settings').onSnapshot(snap => {
+                    if (!snap.empty) {
+                        // 출석 시스템에서 최신 사용하는 문서(meeting_schedule_v2)를 최우선으로 가져오도록 수정
+                        const v2Doc = snap.docs.find(d => d.id === 'meeting_schedule_v2');
+                        const v1Doc = snap.docs.find(d => d.id === 'meeting_time');
                         
-                        const newLimit = data.maxLimit ? parseInt(data.maxLimit) : (data.maxMemberCount ? parseInt(data.maxMemberCount) : 18);
-                        setMaxMemberLimit(newLimit);
+                        const docData = v2Doc ? v2Doc.data() : (v1Doc ? v1Doc.data() : null);
+                        
+                        if (docData) {
+                            setMeetingDate(docData.date || "");
+                            setMeetingTime({ start: docData.start || "", end: docData.end || "" });
+                            setMeetingLocation(docData.location || docData.place || "");
+                            setSyncManagerName(docData.managerName || "");
+                            
+                            const newLimit = parseInt(docData.maxLimit || docData.maxMemberCount || docData.maxAttendees || docData.limit || 18);
+                            setMaxMemberLimit(newLimit);
 
-                        const suggestedTeams = Math.max(2, Math.round(newLimit / 6));
-                        setTeamingSettings(prev => ({ ...prev, teamCount: suggestedTeams }));
+                            if (newLimit > 0) {
+                                const suggestedTeams = Math.max(2, Math.round(newLimit / 6));
+                                setTeamingSettings(prev => ({ ...prev, teamCount: suggestedTeams }));
+                            }
+                        }
                     }
                 });
                 
@@ -402,7 +414,7 @@
             const allAttendees = useMemo(() => {
                 if (!meetingDate) return [];
                 return sessionData
-                    .filter(s => s.date === meetingDate && s.status !== '노쇼')
+                    .filter(s => s.date && meetingDate && s.date.trim() === meetingDate.trim() && s.status !== '노쇼')
                     .sort((a,b) => {
                         const timeA = a.createdAt || '';
                         const timeB = b.createdAt || '';
@@ -742,7 +754,7 @@
             const loadDraft = (draft) => { setTeams(draft.teams); setSyncManagerName(draft.managerName || ""); setActiveTab('results'); setIsConfirmed(!!draft.isConfirmed); setPreviewModalData(null); };
 
             const captureIndividualTeams = async () => { setIsCapturing(true); try { for (let i = 0; i < teams.length; i++) { const element = teamRefs.current[i]; if (element) { const levelTags = element.querySelectorAll('.level-tag'); levelTags.forEach(tag => tag.style.display = 'none'); const canvas = await html2canvas(element, { backgroundColor: '#f1f5f9', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${meetingDate}_TEAM_${i + 1}.png`; link.click(); levelTags.forEach(tag => tag.style.display = 'inline-flex'); } } } catch (e) {} setIsCapturing(false); };
-            const captureAllInOne = async () => { setIsCapturing(true); const container = document.createElement('div'); container.style.padding = '40px'; container.style.backgroundColor = '#f1f5f9'; container.style.width = '1200px'; container.style.display = 'grid'; container.style.gridTemplateColumns = 'repeat(3, 1fr)'; container.style.gap = '20px'; container.style.position = 'fixed'; container.style.top = '-9999px'; const header = document.createElement('div'); header.style.gridColumn = 'span 3'; header.style.textAlign = 'center'; header.style.marginBottom = '30px'; header.innerHTML = `<h1 style="font-size: 36px; font-weight: 900; color: #0f172a; margin-bottom: 8px;">OTP FC TEAM LIST</h1><div style="font-size: 16px; font-weight: 700; color: #64748b;">DATE: ${meetingDate} (${meetingTime.start} ~ ${meetingTime.end}) | MANAGER: ${syncManagerName}</div>`; container.appendChild(header); document.body.appendChild(container); teamRefs.current.forEach((ref) => { if (ref) { const clone = ref.cloneNode(true); clone.querySelectorAll('.level-tag').forEach(tag => tag.remove()); clone.style.width = '100%'; clone.style.transform = 'none'; clone.style.boxShadow = 'none'; clone.style.border = '1px solid #e2e8f0'; container.appendChild(clone); } }); try { const canvas = await html2canvas(container, { backgroundColor: '#f1f5f9', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${meetingDate}_ALL_TEAMS.png`; link.click(); } catch (e) {} document.body.removeChild(container); setIsCapturing(false); };
+            const captureAllInOne = async () => { setIsCapturing(true); const container = document.createElement('div'); container.style.padding = '40px'; container.style.backgroundColor = '#f1f5f9'; container.style.width = '1200px'; container.style.display = 'grid'; container.style.gridTemplateColumns = 'repeat(3, 1fr)'; container.style.gap = '20px'; container.style.position = 'fixed'; container.style.top = '-9999px'; const header = document.createElement('div'); header.style.gridColumn = 'span 3'; header.style.textAlign = 'center'; header.style.marginBottom = '30px'; header.innerHTML = `<h1 style="font-size: 36px; font-weight: 900; color: #0f172a; margin-bottom: 8px;">OTP FC TEAM LIST</h1><div style="font-size: 16px; font-weight: 700; color: #64748b;">DATE: ${meetingDate} (${meetingTime.start} ~ ${meetingTime.end}) | LOC: ${meetingLocation || '미정'} | MGR: ${syncManagerName}</div>`; container.appendChild(header); document.body.appendChild(container); teamRefs.current.forEach((ref) => { if (ref) { const clone = ref.cloneNode(true); clone.querySelectorAll('.level-tag').forEach(tag => tag.remove()); clone.style.width = '100%'; clone.style.transform = 'none'; clone.style.boxShadow = 'none'; clone.style.border = '1px solid #e2e8f0'; container.appendChild(clone); } }); try { const canvas = await html2canvas(container, { backgroundColor: '#f1f5f9', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL('image/png'); link.download = `${meetingDate}_ALL_TEAMS.png`; link.click(); } catch (e) {} document.body.removeChild(container); setIsCapturing(false); };
             const handleFontFileDrop = (e) => { e.preventDefault(); setIsDraggingFile(false); const file = e.dataTransfer.files[0]; if (file && (file.name.endsWith('.ttf') || file.name.endsWith('.otf') || file.name.endsWith('.woff') || file.name.endsWith('.woff2'))) { const reader = new FileReader(); reader.onload = (event) => { const fontData = event.target.result; const fontName = 'CustomUploadedFont'; const fontFace = new FontFace(fontName, `url(${fontData})`); fontFace.load().then((loadedFace) => { document.fonts.add(loadedFace); document.documentElement.style.setProperty('--main-font', `'${fontName}', sans-serif`); document.documentElement.style.setProperty('--bold-font', `'${fontName}', sans-serif`); setCustomFontName(file.name); alert(`폰트가 "${file.name}"(으)로 변경되었습니다!`); }).catch(err => { console.error('Font loading failed:', err); alert('폰트 로드 실패: 유효한 폰트 파일인지 확인해주세요.'); }); }; reader.readAsDataURL(file); } else { alert('ttf, otf, woff 파일만 지원합니다.'); } };
 
             return (
@@ -765,9 +777,12 @@
                         <h1 className="text-4xl font-black tracking-tighter uppercase mb-3">Team Maker</h1>
                         <div className="flex flex-col items-center gap-3">
                             <div className="inline-flex flex-col items-center bg-white px-6 py-3 rounded-[24px] border border-slate-200 shadow-sm transition-all hover:shadow-md">
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex flex-col items-center gap-1.5 mb-2">
                                     <span className="text-sm font-black text-blue-600 uppercase tracking-widest">{meetingDate || 'Syncing...'}</span>
-                                    {meetingTime.start && <div className="flex items-center gap-1 text-sm font-black text-green-600"><Icon.Clock /> {meetingTime.start} ~ {meetingTime.end}</div>}
+                                    <div className="flex flex-wrap justify-center items-center gap-3 text-sm font-black text-green-600">
+                                        {meetingTime.start && <div className="flex items-center gap-1"><Icon.Clock /> {meetingTime.start} ~ {meetingTime.end}</div>}
+                                        {meetingLocation && <div className="flex items-center gap-1"><Icon.MapPin /> {meetingLocation}</div>}
+                                    </div>
                                 </div>
                                 <span className="text-xs font-bold text-slate-400">{selectedList.length}명 참여 확정 (정원 {maxMemberLimit}명)</span>
                             </div>
