@@ -39,14 +39,34 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
     <style>
-        /* 폰트 CDN 적용: 로컬 파일 대신 눈누 웹폰트 사용 */
-        @font-face { font-family: 'Esamanru'; font-weight: 700; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_bold.woff') format('woff'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 500; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 400; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 300; src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_light.woff') format('woff'); }
+        /* 폰트 CDN 적용: 로컬 파일 없이도 폰트가 자체 반영되도록 하는 코드입니다. */
+        @font-face { 
+            font-family: 'Esamanru'; 
+            font-weight: 700; 
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_bold.woff') format('woff'); 
+            font-display: swap; 
+        }
+        @font-face { 
+            font-family: 'Esamanru'; 
+            font-weight: 500; 
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); 
+            font-display: swap; 
+        }
+        @font-face { 
+            font-family: 'Esamanru'; 
+            font-weight: 400; 
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_medium.woff') format('woff'); 
+            font-display: swap; 
+        }
+        @font-face { 
+            font-family: 'Esamanru'; 
+            font-weight: 300; 
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10-21@1.0/esamanru_light.woff') format('woff'); 
+            font-display: swap; 
+        }
 
         body { 
-            font-family: 'Esamanru', sans-serif !important;
+            font-family: 'Esamanru', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif !important;
             -webkit-tap-highlight-color: transparent; 
             background-color: #f8fafc;
             user-select: none;
@@ -807,7 +827,7 @@
                                     
                                     <CurrentTimeClock />
                                     
-                                    <div className="bg-white px-5 py-2.5 rounded-full border border-slate-200 shadow-sm flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs sm:text-sm">
+                                    <div className="bg-white px-5 py-2.5 rounded-full border border-slate-200 shadow-sm flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs sm:text-sm mt-2">
                                         <div className="flex items-center gap-1.5 font-bold text-slate-600">
                                             <Icon.Calendar size={14} className="text-slate-400"/>
                                             <span>{meetingTimes.date}</span>
