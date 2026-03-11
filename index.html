@@ -286,6 +286,21 @@
             useEffect(() => { sessionStorage.setItem('otp_target_month', targetMonth); }, [targetMonth]);
             useEffect(() => { sessionStorage.setItem('otp_dir_view', directoryViewMode); }, [directoryViewMode]);
 
+            const membersByTier = useMemo(() => {
+                const grouped = {};
+                activeMembers.forEach(m => {
+                    const lvl = parseInt(m.level) || 0;
+                    if (!grouped[lvl]) grouped[lvl] = [];
+                    grouped[lvl].push(m);
+                });
+                return Object.keys(grouped)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map(lvl => ({
+                        level: lvl,
+                        members: grouped[lvl].sort((a,b) => a.name.localeCompare(b.name))
+                    }));
+            }, [activeMembers]);
+
             const filteredMonthlyMembers = useMemo(() => {
                 let list = [...activeMembers].sort((a,b)=>a.name.localeCompare(b.name));
                 if (filterCategory !== 'all') {
@@ -671,6 +686,18 @@
                 document.body.removeChild(link);
             };
 
+            // 정렬된 티어 멤버 가져오기 (tierOrder 필드 우선 적용, 없으면 이름순)
+            const getSortedTierMembers = (level, gender) => {
+                return activeMembers
+                    .filter(m => m.gender === gender && Number(m.level) === level)
+                    .sort((a, b) => {
+                        const orderA = a.tierOrder !== undefined ? a.tierOrder : 999;
+                        const orderB = b.tierOrder !== undefined ? b.tierOrder : 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        return a.name.localeCompare(b.name);
+                    });
+            };
+
             const handleCaptureTierView = () => {
                 setIsTierCapturing(true); 
                 setTimeout(() => {
@@ -704,13 +731,13 @@
             const handleCopyTierList = () => {
                 let textToCopy = `[ OTP FC 종합 티어표 ]\n총 ${activeMembers.length}명\n\n[ 남성 (1~6단계) ]\n`;
                 for (let i = 1; i <= 6; i++) {
-                    const tierMembers = activeMembers.filter(m => m.gender === '남성' && Number(m.level) === i).sort((a,b) => a.name.localeCompare(b.name));
+                    const tierMembers = getSortedTierMembers(i, '남성');
                     const names = tierMembers.map(m => m.name).join(', ') || '-';
                     textToCopy += `${i}단계: ${names}\n`;
                 }
                 textToCopy += `\n[ 여성 (7~12단계) ]\n`;
                 for (let i = 7; i <= 12; i++) {
-                    const tierMembers = activeMembers.filter(m => m.gender === '여성' && Number(m.level) === i).sort((a,b) => a.name.localeCompare(b.name));
+                    const tierMembers = getSortedTierMembers(i, '여성');
                     const names = tierMembers.map(m => m.name).join(', ') || '-';
                     textToCopy += `${i}단계: ${names}\n`;
                 }
@@ -721,6 +748,93 @@
                     }).catch(() => fallbackCopy(textToCopy));
                 } else {
                     fallbackCopy(textToCopy);
+                }
+            };
+
+            // 드래그 앤 드롭 핸들러
+            const handleDragStart = (e, member) => {
+                e.dataTransfer.setData('memberId', member.id);
+                e.dataTransfer.effectAllowed = "move";
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+            };
+
+            // 티어 내 특정 멤버 위로 드롭했을 때 (순서 끼워넣기)
+            const handleDropOnMember = async (e, targetMember, newLevel) => {
+                e.preventDefault();
+                e.stopPropagation(); // 부모 컨테이너의 드롭 이벤트 방지
+                
+                const draggedMemberId = e.dataTransfer.getData('memberId');
+                if (!draggedMemberId || draggedMemberId === targetMember.id) return;
+
+                const draggedMember = activeMembers.find(m => m.id === draggedMemberId);
+                if (!draggedMember) return;
+
+                const isMan = draggedMember.gender === '남성';
+                if (isMan && newLevel > 6) return showAlert("알림", "남성은 1~6단계로만 이동 가능합니다.");
+                if (!isMan && newLevel < 7) return showAlert("알림", "여성은 7~12단계로만 이동 가능합니다.");
+
+                // 이동될 티어의 현재 정렬된 멤버 리스트
+                let currentTierMembers = getSortedTierMembers(newLevel, draggedMember.gender);
+                
+                // 드래그된 멤버를 리스트에서 임시 제외
+                currentTierMembers = currentTierMembers.filter(m => m.id !== draggedMemberId);
+                
+                // 드롭된 위치(타겟 멤버의 인덱스) 찾기
+                const targetIndex = currentTierMembers.findIndex(m => m.id === targetMember.id);
+                
+                // 마우스 드롭 위치(상단/하단)에 따라 타겟 멤버 앞이나 뒤에 삽입
+                const targetRect = e.currentTarget.getBoundingClientRect();
+                const insertAfter = e.clientY > targetRect.top + (targetRect.height / 2);
+
+                if (insertAfter) {
+                    currentTierMembers.splice(targetIndex + 1, 0, draggedMember);
+                } else {
+                    currentTierMembers.splice(targetIndex, 0, draggedMember);
+                }
+
+                updateTierOrder(currentTierMembers, newLevel);
+            };
+
+            // 빈 티어 영역에 드롭했을 때 (맨 뒤에 추가)
+            const handleDropOnTier = async (e, newLevel) => {
+                e.preventDefault();
+                const draggedMemberId = e.dataTransfer.getData('memberId');
+                if (!draggedMemberId) return;
+
+                const draggedMember = activeMembers.find(m => m.id === draggedMemberId);
+                if (!draggedMember) return;
+
+                const isMan = draggedMember.gender === '남성';
+                if (isMan && newLevel > 6) return showAlert("알림", "남성은 1~6단계로만 이동 가능합니다.");
+                if (!isMan && newLevel < 7) return showAlert("알림", "여성은 7~12단계로만 이동 가능합니다.");
+
+                let currentTierMembers = getSortedTierMembers(newLevel, draggedMember.gender);
+                // 이미 해당 티어라면 맨 뒤로 이동
+                currentTierMembers = currentTierMembers.filter(m => m.id !== draggedMemberId);
+                currentTierMembers.push(draggedMember);
+
+                updateTierOrder(currentTierMembers, newLevel);
+            };
+
+            // 정렬된 배열대로 DB 업데이트 일괄 실행
+            const updateTierOrder = async (sortedMembers, newLevel) => {
+                try {
+                    const batch = db.batch();
+                    sortedMembers.forEach((m, index) => {
+                        const ref = getMemberCol().doc(m.id);
+                        batch.update(ref, { 
+                            level: String(newLevel),
+                            tierOrder: index 
+                        });
+                    });
+                    await batch.commit();
+                } catch (error) {
+                    console.error("Order update failed:", error);
+                    showAlert("오류", "순서 변경에 실패했습니다.");
                 }
             };
 
@@ -803,7 +917,11 @@
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className={`flex items-center justify-between w-full ${isCompact ? 'mb-0.5' : 'mb-1.5'}`}>
                                 <h3 className={`${isCompact ? 'text-sm sm:text-base' : 'text-xl sm:text-2xl'} font-black text-slate-900 whitespace-nowrap flex-shrink-0 mr-2`}>{m.name}</h3>
-                                {!isCompact && (
+                                {isCompact ? (
+                                    <div className="flex flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                        <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all p-1"><Icon.Edit size={12}/></button>
+                                    </div>
+                                ) : (
                                     <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                                         <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.Edit size={14}/></button>
                                         <button onClick={() => {
@@ -940,15 +1058,36 @@
                                                             <h4 className="font-black text-blue-600 text-sm flex items-center gap-1.5 px-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 남성 (1~6단계)</h4>
                                                             <div className="grid grid-cols-6 gap-1 sm:gap-2">
                                                                 {[1, 2, 3, 4, 5, 6].map(lvl => {
-                                                                    const tierMembers = activeMembers.filter(m => m.gender === '남성' && Number(m.level) === lvl).sort((a,b) => a.name.localeCompare(b.name));
+                                                                    const tierMembers = getSortedTierMembers(lvl, '남성');
                                                                     return (
-                                                                        <div key={`m-${lvl}`} className="bg-blue-50/50 rounded-xl p-1.5 border border-blue-100 flex flex-col items-center">
-                                                                            <div className="w-full text-center bg-blue-100 text-blue-700 text-[10px] sm:text-xs font-black py-1 rounded-lg mb-2 shadow-sm">{lvl}단계</div>
-                                                                            <div className="flex flex-col gap-1 w-full text-center">
+                                                                        <div 
+                                                                            key={`m-${lvl}`} 
+                                                                            className="bg-blue-50/50 rounded-xl p-1.5 border border-blue-100 flex flex-col items-center min-h-[80px]"
+                                                                            onDragOver={handleDragOver}
+                                                                            onDrop={(e) => handleDropOnTier(e, lvl)}
+                                                                        >
+                                                                            <div className="w-full text-center bg-blue-100 text-blue-700 text-[10px] sm:text-xs font-black py-1 rounded-lg mb-2 shadow-sm pointer-events-none">{lvl}단계</div>
+                                                                            <div className="flex flex-col gap-1 w-full text-center pb-2">
                                                                                 {tierMembers.map(m => (
-                                                                                    <div key={m.id} className="text-[10px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">{m.name}</div>
+                                                                                    <div 
+                                                                                        key={m.id} 
+                                                                                        draggable
+                                                                                        onDragStart={(e) => handleDragStart(e, m)}
+                                                                                        onDragOver={handleDragOver}
+                                                                                        onDrop={(e) => handleDropOnMember(e, m, lvl)}
+                                                                                        className="group relative flex items-center justify-center cursor-move p-1 rounded hover:bg-white/60 transition-colors border border-transparent hover:border-blue-300"
+                                                                                        title="드래그하여 순서/티어 이동"
+                                                                                    >
+                                                                                        <span className="text-[10px] sm:text-xs font-bold text-slate-700 whitespace-nowrap pointer-events-none">{m.name}</span>
+                                                                                        <button 
+                                                                                            onClick={() => setEditingMember({...m})} 
+                                                                                            className="absolute -right-4 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-500 transition-all p-0.5"
+                                                                                        >
+                                                                                            <Icon.Edit size={10}/>
+                                                                                        </button>
+                                                                                    </div>
                                                                                 ))}
-                                                                                {tierMembers.length === 0 && <div className="text-[9px] text-slate-300">-</div>}
+                                                                                {tierMembers.length === 0 && <div className="text-[9px] text-slate-300 pointer-events-none">-</div>}
                                                                             </div>
                                                                         </div>
                                                                     );
@@ -961,15 +1100,36 @@
                                                             <h4 className="font-black text-pink-500 text-sm flex items-center gap-1.5 px-1"><span className="w-2.5 h-2.5 rounded-full bg-pink-400"></span> 여성 (7~12단계)</h4>
                                                             <div className="grid grid-cols-6 gap-1 sm:gap-2">
                                                                 {[7, 8, 9, 10, 11, 12].map(lvl => {
-                                                                    const tierMembers = activeMembers.filter(m => m.gender === '여성' && Number(m.level) === lvl).sort((a,b) => a.name.localeCompare(b.name));
+                                                                    const tierMembers = getSortedTierMembers(lvl, '여성');
                                                                     return (
-                                                                        <div key={`f-${lvl}`} className="bg-pink-50/50 rounded-xl p-1.5 border border-pink-100 flex flex-col items-center">
-                                                                            <div className="w-full text-center bg-pink-100 text-pink-600 text-[10px] sm:text-xs font-black py-1 rounded-lg mb-2 shadow-sm">{lvl}단계</div>
-                                                                            <div className="flex flex-col gap-1 w-full text-center">
+                                                                        <div 
+                                                                            key={`f-${lvl}`} 
+                                                                            className="bg-pink-50/50 rounded-xl p-1.5 border border-pink-100 flex flex-col items-center min-h-[80px]"
+                                                                            onDragOver={handleDragOver}
+                                                                            onDrop={(e) => handleDropOnTier(e, lvl)}
+                                                                        >
+                                                                            <div className="w-full text-center bg-pink-100 text-pink-600 text-[10px] sm:text-xs font-black py-1 rounded-lg mb-2 shadow-sm pointer-events-none">{lvl}단계</div>
+                                                                            <div className="flex flex-col gap-1 w-full text-center pb-2">
                                                                                 {tierMembers.map(m => (
-                                                                                    <div key={m.id} className="text-[10px] sm:text-xs font-bold text-slate-700 whitespace-nowrap">{m.name}</div>
+                                                                                    <div 
+                                                                                        key={m.id} 
+                                                                                        draggable
+                                                                                        onDragStart={(e) => handleDragStart(e, m)}
+                                                                                        onDragOver={handleDragOver}
+                                                                                        onDrop={(e) => handleDropOnMember(e, m, lvl)}
+                                                                                        className="group relative flex items-center justify-center cursor-move p-1 rounded hover:bg-white/60 transition-colors border border-transparent hover:border-pink-300"
+                                                                                        title="드래그하여 순서/티어 이동"
+                                                                                    >
+                                                                                        <span className="text-[10px] sm:text-xs font-bold text-slate-700 whitespace-nowrap pointer-events-none">{m.name}</span>
+                                                                                        <button 
+                                                                                            onClick={() => setEditingMember({...m})} 
+                                                                                            className="absolute -right-4 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-pink-500 transition-all p-0.5"
+                                                                                        >
+                                                                                            <Icon.Edit size={10}/>
+                                                                                       </button>
+                                                                                    </div>
                                                                                 ))}
-                                                                                {tierMembers.length === 0 && <div className="text-[9px] text-slate-300">-</div>}
+                                                                                {tierMembers.length === 0 && <div className="text-[9px] text-slate-300 pointer-events-none">-</div>}
                                                                             </div>
                                                                         </div>
                                                                     );
