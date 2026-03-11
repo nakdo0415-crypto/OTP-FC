@@ -39,10 +39,25 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     
     <style>
-        @font-face { font-family: 'Esamanru'; font-weight: 700; src: url('esamanru%20Bold.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 500; src: url('esamanru%20Medium.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 300; src: url('esamanru%20Light.ttf') format('truetype'); }
-        @font-face { font-family: 'Esamanru'; font-weight: 400; src: url('esamanru%20Medium.ttf') format('truetype'); }
+        /* 출석/팀 메이커 시스템 폰트 로직 반영 (실제 공게임즈 폰트) */
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicMedium.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicBold.woff') format('woff');
+            font-weight: 700;
+            font-style: normal;
+        }
+        @font-face {
+            font-family: 'Esamanru';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicLight.woff') format('woff');
+            font-weight: 300;
+            font-style: normal;
+        }
 
         body { 
             font-family: 'Esamanru', sans-serif !important;
@@ -952,12 +967,17 @@
                     {!isLoginModalOpen && (
                         <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b z-50 h-16 sm:h-20 flex items-center px-4 shadow-sm text-slate-900 transition-all">
                             <div className="max-w-6xl mx-auto w-full flex justify-between items-center text-left">
-                                <div className="flex items-center gap-3">
-                                    <h1 className="text-2xl font-black text-[#db2777] tracking-tighter uppercase leading-none drop-shadow-sm">OTP FC</h1>
-                                    <span className="text-slate-400 font-bold text-xs uppercase hidden sm:block">명단 관리 시스템</span>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                    {/* 홈 버튼을 출석 시스템과 동일하게 좌측 타이틀 옆으로 배치 */}
+                                    <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="p-2.5 mr-1 sm:mr-2 rounded-xl transition-all bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center shadow-none border-none" title="홈으로 가기">
+                                        <Icon.Home size={18} />
+                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        <h1 className="text-2xl font-black text-[#db2777] tracking-tighter uppercase leading-none drop-shadow-sm">OTP FC</h1>
+                                        <span className="text-slate-400 font-bold text-xs uppercase hidden sm:block">명단 관리 시스템</span>
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2 sm:gap-3">
-                                    <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all shadow-none border-none" title="홈으로 가기"><Icon.Home size={18} /></button>
                                     {loggedInManager && (
                                         <button className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-600">
                                             <Icon.ShieldCheck size={14} className="text-blue-600" />
@@ -1393,7 +1413,12 @@
                     {/* 로그인 모달 */}
                     {isLoginModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[9000] flex items-center justify-center p-4">
-                            <div className="bg-white rounded-[48px] w-full max-w-md p-10 shadow-2xl animate-zoom-in text-center border-2 border-blue-50">
+                            <div className="bg-white rounded-[48px] w-full max-w-md p-10 shadow-2xl animate-zoom-in text-center border-2 border-blue-50 relative">
+                                {/* ---------------- 로그인 화면 홈 버튼 추가 ---------------- */}
+                                <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="absolute top-8 left-8 text-slate-300 hover:text-slate-500 transition-all bg-transparent border-none" title="홈으로 가기">
+                                    <Icon.Home size={24} />
+                                </button>
+
                                 <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-blue-100 text-white"><Icon.ShieldCheck size={40} /></div>
                                 <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter uppercase">Admin Login</h2>
                                 <p className="text-slate-400 text-sm font-bold mb-8 tracking-widest uppercase text-xs text-center">명단 관리 시스템</p>
