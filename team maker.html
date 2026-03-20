@@ -679,7 +679,7 @@
                             const m2 = weakTeam.members[bestSwap.weakIdx];
 
                             strongTeam.members[bestSwap.strongIdx] = m2;
-                            strongTeam.members[bestSwap.weakIdx] = m1;
+                            weakTeam.members[bestSwap.weakIdx] = m1;
 
                             strongTeam.scoreSum = strongTeam.scoreSum - m1.points + m2.points;
                             weakTeam.scoreSum = weakTeam.scoreSum - m2.points + m1.points;
