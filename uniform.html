@@ -1,0 +1,429 @@
+import React, { useState, useEffect } from 'react';
+import { Download, Users, Shirt, CheckCircle2, Circle, ClipboardList, Home, RefreshCw, AlertCircle } from 'lucide-react';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+
+// 기존 시스템의 Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyCAcQzliuWJTB8vPm9gb0vsyR8pIAx7YTw",
+  authDomain: "otp-fc-check.firebaseapp.com",
+  projectId: "otp-fc-check",
+  storageBucket: "otp-fc-check.firebasestorage.app",
+  messagingSenderId: "907414776392",
+  appId: "1:907414776392:web:0a29a660bb956e5a40467d"
+};
+
+// Firebase 초기화 (중복 초기화 방지)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const auth = getAuth(app);
+const db = getFirestore(app);
+const APP_ID = 'otp-fc-attendance';
+
+const SIZES = ['85(XS)', '90(S)', '95(M)', '100(L)', '105(XL)', '110(2XL)', '115(3XL)'];
+
+// 디자인 시스템 유틸리티 함수 (기존 로직 이식)
+const getGenderPastelClass = (gender) => gender === '남성' ? 'bg-[#E1F0FF] text-[#2563EB]' : 'bg-[#FFE5ED] text-[#DB2777]';
+const getPosColorClass = (pos) => {
+  if (!pos) return 'bg-slate-50 text-slate-400 border-slate-100';
+  const p = String(pos).toLowerCase();
+  if (p.includes('피보')) return 'bg-red-50 text-red-500 border-red-100';
+  if (p.includes('아라')) return 'bg-green-50 text-green-600 border-green-100';
+  if (p.includes('픽소')) return 'bg-blue-50 text-blue-500 border-blue-100';
+  if (p.includes('골레이로')) return 'bg-purple-50 text-purple-600 border-purple-100';
+  return 'bg-yellow-50 text-yellow-600 border-yellow-100';
+};
+const getRoleBadgeClass = (role) => {
+  switch(role) {
+    case '회장': return 'bg-slate-900 text-white';
+    case '매니저': return 'bg-blue-600 text-white';
+    case '총무': return 'bg-green-600 text-white';
+    case '부총무': return 'bg-green-100 text-green-700';
+    default: return 'bg-slate-100 text-slate-400';
+  }
+};
+
+export default function App() {
+  const [members, setMembers] = useState([]);
+  const [orders, setOrders] = useState({}); // { memberId: { size, number, printName, includeShorts } }
+  const [activeTab, setActiveTab] = useState('selection');
+  const [loading, setLoading] = useState(true);
+
+  // Firebase 데이터 연동
+  useEffect(() => {
+    const initData = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.error("Auth error:", e);
+      }
+    };
+    initData();
+
+    const unsubAuth = onAuthStateChanged(auth, user => {
+      if (user) {
+        // 1. 회원 명단 구독 (탈퇴자 제외)
+        const membersRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'members');
+        const unsubMembers = onSnapshot(membersRef, snap => {
+          const fetchedMembers = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(m => !m.isResigned)
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setMembers(fetchedMembers);
+          setLoading(false);
+        });
+
+        // 2. 유니폼 주문 데이터 구독 (실시간 동기화)
+        const ordersRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'uniform_settings', 'current_order');
+        const unsubOrders = onSnapshot(ordersRef, docSnap => {
+          if (docSnap.exists() && docSnap.data().data) {
+            setOrders(docSnap.data().data);
+          }
+        });
+
+        return () => { unsubMembers(); unsubOrders(); };
+      }
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  const saveOrdersToFirebase = async (newOrders) => {
+    try {
+      await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'uniform_settings', 'current_order'), { 
+        data: newOrders,
+        updatedAt: new Date().toISOString()
+      }); // { merge: true } 옵션을 제거하여 체크 해제 시 삭제된 상태가 완벽히 덮어씌워지도록 수정
+    } catch (e) {
+      console.error("Order save failed:", e);
+    }
+  };
+
+  const toggleOrder = (member) => {
+    const newOrders = { ...orders };
+    if (newOrders[member.id]) {
+      delete newOrders[member.id];
+    } else {
+      newOrders[member.id] = { 
+        topSize: '100(L)', 
+        bottomSize: '100(L)', 
+        sleeveType: '반팔',
+        number: '', 
+        printName: member.name, 
+        includeShorts: false 
+      };
+    }
+    setOrders(newOrders);
+    saveOrdersToFirebase(newOrders); // Firebase 즉시 저장
+  };
+
+  const updateOrderDetail = (memberId, field, value) => {
+    const newOrders = { 
+      ...orders, 
+      [memberId]: { ...orders[memberId], [field]: value } 
+    };
+    setOrders(newOrders);
+    saveOrdersToFirebase(newOrders); // Firebase 즉시 저장
+  };
+
+  const exportToCSV = () => {
+    const orderKeys = Object.keys(orders);
+    if (orderKeys.length === 0) {
+      alert("구매 희망자가 없습니다.");
+      return;
+    }
+
+    const headers = ['이름', '성별', '소매 기장', '상의 사이즈', '등번호', '마킹 이름', '반바지 추가', '하의 사이즈'];
+    const rows = orderKeys.map(id => {
+      const m = members.find(x => x.id === id);
+      if(!m) return null;
+      const d = orders[id];
+      const topSize = d.topSize || d.size || '100(L)';
+      const bottomSize = d.includeShorts ? (d.bottomSize || '100(L)') : 'X';
+      const sleeveType = d.sleeveType || '반팔';
+      return `${m.name},${m.gender},${sleeveType},${topSize},${d.number},${d.printName},${d.includeShorts ? 'O' : 'X'},${bottomSize}`;
+    }).filter(Boolean);
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `OTP_FC_유니폼_주문명단_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const orderedCount = Object.keys(orders).length;
+  const orderingMembers = members.filter(m => orders[m.id]);
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-[#f8fafc] flex flex-col items-center justify-center z-50">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="mt-4 font-bold text-slate-500 animate-pulse">명단 연동 중...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-24">
+      {/* 폰트 및 글로벌 스타일 인젝션 */}
+      <style>{`
+        @font-face {
+          font-family: 'Esamanru';
+          src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicMedium.woff') format('woff');
+          font-weight: normal;
+          font-style: normal;
+        }
+        @font-face {
+          font-family: 'Esamanru';
+          src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/GongGothicBold.woff') format('woff');
+          font-weight: 700;
+          font-style: normal;
+        }
+        body { font-family: 'Esamanru', sans-serif !important; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .animate-zoom-in { animation: zoomIn 0.3s ease-out; }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+      `}</style>
+
+      {/* Header (명단 시스템 UI 복제) */}
+      <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b border-slate-100 z-50 h-16 sm:h-20 flex items-center px-4 shadow-sm transition-all">
+        <div className="max-w-6xl mx-auto w-full flex justify-between items-center">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button onClick={() => window.location.href = 'https://nakdo0415-crypto.github.io/OTP-FC/home.html'} className="p-2.5 mr-1 sm:mr-2 rounded-xl transition-all bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center">
+              <Home size={18} />
+            </button>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-black text-[#db2777] tracking-tighter uppercase leading-none drop-shadow-sm">OTP FC</h1>
+              <span className="text-slate-400 font-bold text-xs uppercase hidden sm:flex items-center gap-1"><Shirt size={14}/> 유니폼 주문 시스템</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs sm:text-sm font-black">
+            <span className="text-slate-400">총원 <span className="text-slate-600">{members.length}</span></span>
+            <span className="text-slate-200">|</span>
+            <span className="text-slate-400">주문 <span className="text-blue-600">{orderedCount}</span></span>
+            <button onClick={() => window.location.reload()} className="p-2 ml-2 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all">
+              <RefreshCw size={18} />
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto p-4 sm:p-8 animate-zoom-in">
+        
+        {/* 메인 탭 */}
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit mb-8 shadow-inner mx-auto sm:mx-0">
+          <button
+            onClick={() => setActiveTab('selection')}
+            className={`flex items-center gap-2 px-6 py-3 text-sm font-black rounded-xl transition-all ${
+              activeTab === 'selection' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Users className="w-4 h-4" /> 1. 구매자 선택
+          </button>
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`flex items-center gap-2 px-6 py-3 text-sm font-black rounded-xl transition-all ${
+              activeTab === 'details' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4" /> 2. 상세 정보 입력
+            {orderedCount > 0 && (
+              <span className="bg-blue-100 text-blue-600 text-[10px] px-2 py-0.5 rounded-full ml-1 font-black">
+                {orderedCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab 1: 구매자 선택 (회원 카드 UI 적용) */}
+        {activeTab === 'selection' && (
+          <div className="animate-zoom-in">
+            <div className="mb-6">
+              <h2 className="text-2xl font-black text-slate-800 tracking-tighter">구매 희망자 선택</h2>
+              <p className="text-xs font-bold text-slate-400 mt-1">유니폼을 구매할 회원의 카드를 탭하여 선택해주세요.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {members.map(m => {
+                const isSelected = !!orders[m.id];
+                return (
+                  <div 
+                    key={m.id}
+                    onClick={() => toggleOrder(m)}
+                    className={`p-5 sm:p-6 rounded-[32px] border-2 cursor-pointer relative group transition-all duration-200 ${
+                      isSelected 
+                        ? 'border-blue-500 bg-blue-50/50 shadow-md ring-4 ring-blue-500/10' 
+                        : 'border-slate-100 bg-white hover:shadow-lg hover:border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4 text-left">
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-xl font-black shadow-lg transition-transform ${isSelected ? 'bg-blue-600 text-white scale-110' : getGenderPastelClass(m.gender)}`}>
+                        {isSelected ? <CheckCircle2 className="w-7 h-7" /> : m.level}
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <h3 className={`text-xl sm:text-2xl font-black mb-1.5 transition-colors ${isSelected ? 'text-blue-800' : 'text-slate-900'}`}>
+                          {m.name}
+                        </h3>
+                        <div className="flex flex-nowrap items-center gap-1 w-full overflow-x-auto custom-scrollbar pb-1">
+                          <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
+                          {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: 상세 정보 입력 (둥글고 세련된 폼) */}
+        {activeTab === 'details' && (
+          <div className="animate-zoom-in">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tighter">주문 상세 정보</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">사이즈, 등번호, 마킹 정보를 꼼꼼히 확인해주세요.</p>
+              </div>
+              <button 
+                onClick={exportToCSV}
+                className="flex justify-center items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl shadow-xl shadow-slate-200 font-black transition-all active:scale-95 text-sm"
+              >
+                <Download className="w-4 h-4" /> CSV로 명단 내보내기
+              </button>
+            </div>
+
+            {orderingMembers.length === 0 ? (
+              <div className="bg-white p-16 rounded-[48px] shadow-sm border border-slate-100 text-center flex flex-col items-center">
+                <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mb-4">
+                  <Shirt className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-black text-slate-600 tracking-tighter">선택된 구매 희망자가 없습니다</h3>
+                <p className="text-sm font-bold text-slate-400 mt-2">이전 탭에서 먼저 구매할 회원을 선택해주세요.</p>
+                <button 
+                  onClick={() => setActiveTab('selection')}
+                  className="mt-6 px-6 py-3 bg-blue-50 text-blue-600 rounded-xl font-black text-sm hover:bg-blue-100 transition-all"
+                >
+                  구매자 선택하러 가기
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="overflow-x-auto custom-scrollbar p-2">
+                  <table className="w-full text-left border-collapse min-w-[1000px]">
+                    <thead>
+                      <tr className="text-slate-400 text-[11px] uppercase tracking-widest font-black border-b border-slate-100">
+                        <th className="p-4 pl-6 whitespace-nowrap">이름</th>
+                        <th className="p-4 whitespace-nowrap">소매 기장</th>
+                        <th className="p-4 whitespace-nowrap">상의 사이즈</th>
+                        <th className="p-4 whitespace-nowrap">등번호</th>
+                        <th className="p-4 whitespace-nowrap">마킹 이름</th>
+                        <th className="p-4 text-center whitespace-nowrap">반바지 추가</th>
+                        <th className="p-4 whitespace-nowrap text-center">하의 사이즈</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {orderingMembers.map(member => (
+                        <tr key={member.id} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className="p-5 pl-6">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getGenderPastelClass(member.gender)}`}>
+                                {member.gender === '남성' ? 'M' : 'F'}
+                              </div>
+                              <span className="font-black text-slate-800 text-base whitespace-nowrap">{member.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="relative">
+                              <select 
+                                value={orders[member.id].sleeveType || '반팔'}
+                                onChange={(e) => updateOrderDetail(member.id, 'sleeveType', e.target.value)}
+                                className="w-full p-3 pr-8 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                              >
+                                <option value="반팔">반팔</option>
+                                <option value="긴팔">긴팔</option>
+                              </select>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="relative">
+                              <select 
+                                value={orders[member.id].topSize || orders[member.id].size || '100(L)'}
+                                onChange={(e) => updateOrderDetail(member.id, 'topSize', e.target.value)}
+                                className="w-full p-3 pr-8 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                              >
+                                {SIZES.map(size => (
+                                  <option key={size} value={size}>{size}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <input 
+                              type="number" 
+                              min="0" 
+                              max="99"
+                              placeholder="0~99"
+                              value={orders[member.id].number}
+                              onChange={(e) => updateOrderDetail(member.id, 'number', e.target.value)}
+                              className="w-20 p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all text-center placeholder:font-bold"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <input 
+                              type="text" 
+                              value={orders[member.id].printName}
+                              onChange={(e) => updateOrderDetail(member.id, 'printName', e.target.value)}
+                              className="w-full p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all"
+                            />
+                          </td>
+                          <td className="p-3 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                              <input 
+                                type="checkbox" 
+                                checked={orders[member.id].includeShorts}
+                                onChange={(e) => updateOrderDetail(member.id, 'includeShorts', e.target.checked)}
+                                className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                              />
+                              <span className={`ml-2 text-xs font-black whitespace-nowrap ${orders[member.id].includeShorts ? 'text-blue-600' : 'text-slate-400'}`}>
+                                {orders[member.id].includeShorts ? '추가함' : '미추가'}
+                              </span>
+                            </label>
+                          </td>
+                          <td className="p-3">
+                            {orders[member.id].includeShorts ? (
+                              <div className="relative animate-fade-in">
+                                <select 
+                                  value={orders[member.id].bottomSize || '100(L)'}
+                                  onChange={(e) => updateOrderDetail(member.id, 'bottomSize', e.target.value)}
+                                  className="w-full p-3 pr-8 bg-blue-50 rounded-xl font-black text-blue-700 outline-none border-2 border-blue-200 focus:border-blue-400 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                                >
+                                  {SIZES.map(size => (
+                                    <option key={size} value={size}>{size}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <div className="w-full p-3 bg-slate-100/50 rounded-xl font-black text-slate-300 text-sm text-center border-2 border-transparent select-none whitespace-nowrap">
+                                선택 안함
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
