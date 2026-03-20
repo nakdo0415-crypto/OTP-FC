@@ -530,7 +530,9 @@
                     const masterInfo = members.find(m => m.id === p.memberId) || {};
                     const lvl = parseInt(masterInfo.level || p.level || 99);
                     const tOrder = masterInfo.tierOrder !== undefined ? masterInfo.tierOrder : 99;
-                    const adjustedPoints = getLevelPoints(lvl) - (tOrder * 0.01);
+                    
+                    // 동 티어 내 무작위성 부여: 미세 점수 차감을 제거하여 동일 티어는 같은 점수를 갖게 함
+                    const adjustedPoints = getLevelPoints(lvl);
                     
                     return { 
                         ...p, 
@@ -630,7 +632,7 @@
                         const weakTeam = resultTeams[resultTeams.length - 1];
 
                         const scoreDiff = strongTeam.scoreSum - weakTeam.scoreSum;
-                        if (scoreDiff <= 0.01 && !avoidOverlap) break; 
+                        if (scoreDiff === 0 && !avoidOverlap) break; 
 
                         let bestSwap = null;
                         let bestScoreDiff = scoreDiff;
@@ -677,7 +679,7 @@
                             const m2 = weakTeam.members[bestSwap.weakIdx];
 
                             strongTeam.members[bestSwap.strongIdx] = m2;
-                            weakTeam.members[bestSwap.weakIdx] = m1;
+                            strongTeam.members[bestSwap.weakIdx] = m1;
 
                             strongTeam.scoreSum = strongTeam.scoreSum - m1.points + m2.points;
                             weakTeam.scoreSum = weakTeam.scoreSum - m2.points + m1.points;
@@ -696,7 +698,7 @@
                         return a.tierOrder - b.tierOrder;
                     });
                     const reordered = reorderMembersWithGenderRule(t.members);
-                    return { members: reordered, scoreSum: Math.round(t.scoreSum * 100) / 100 };
+                    return { members: reordered, scoreSum: t.scoreSum };
                 });
 
                 setTeams(finalTeams);
@@ -757,8 +759,8 @@
                 const [movedMember] = sourceTeam.members.splice(sourceMemberIdx, 1);
                 if (sourceTeamIdx === targetTeamIdx) { const actualTargetIdx = (targetMemberIdx === null || targetMemberIdx === undefined) ? targetTeam.members.length : targetMemberIdx; targetTeam.members.splice(actualTargetIdx, 0, movedMember); } 
                 else { if (targetMemberIdx === undefined || targetMemberIdx === null) { targetTeam.members.push(movedMember); } else { targetTeam.members.splice(targetMemberIdx, 0, movedMember); } }
-                sourceTeam.scoreSum = Math.round(sourceTeam.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
-                if (sourceTeamIdx !== targetTeamIdx) { targetTeam.scoreSum = Math.round(targetTeam.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100; }
+                sourceTeam.scoreSum = sourceTeam.members.reduce((acc, cur) => acc + cur.points, 0);
+                if (sourceTeamIdx !== targetTeamIdx) { targetTeam.scoreSum = targetTeam.members.reduce((acc, cur) => acc + cur.points, 0); }
                 newTeams[sourceTeamIdx].members = reorderMembersWithGenderRule(newTeams[sourceTeamIdx].members);
                 if (sourceTeamIdx !== targetTeamIdx) { newTeams[targetTeamIdx].members = reorderMembersWithGenderRule(newTeams[targetTeamIdx].members); }
                 setTeams(newTeams);
@@ -1047,8 +1049,8 @@
                                     <h4 className="text-xs font-black text-blue-600 uppercase mb-2 flex items-center gap-1.5"><Icon.Info /> Smart Balancing Engine</h4>
                                     <ul className="text-[11px] text-slate-600 font-bold space-y-1.5 text-left">
                                         <li>• 개인 기량(티어)을 최우선으로 고려하여 강팀 쏠림 현상을 방지합니다.</li>
-                                        <li>• 명단 관리 시스템의 <b className="text-blue-700">티어 내 순서(순위)</b>를 인식하여 동 티어 내에서도 S자 드래프트를 유도합니다.</li>
-                                        <li>• 각 팀의 총 인원수를 최대한 균등하게 맞춥니다.</li>
+                                        <li>• <b className="text-blue-700">동 티어 내에서는 무작위 제비뽑기</b>를 통해 매번 새로운 팀 조합이 나오도록 랜덤성을 부여합니다.</li>
+                                        <li>• 각 팀의 총 인원수와 이전 모임 중복 여부를 고려하여 밸런스를 맞춥니다.</li>
                                     </ul>
                                 </div>
                                 <button onClick={generateTeams} className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black text-lg shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all outline-none">편성 시작</button>
