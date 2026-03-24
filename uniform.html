@@ -48,7 +48,9 @@
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .animate-zoom-in { animation: zoomIn 0.3s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
         @keyframes zoomIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -88,6 +90,7 @@
             Edit2: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
             X: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
             Save: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+            AlertCircle: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
         };
 
         const SIZES = ['85(XS)', '90(S)', '95(M)', '100(L)', '105(XL)', '110(2XL)', '115(3XL)'];
@@ -118,6 +121,9 @@
             const [activeTab, setActiveTab] = useState('selection');
             const [loading, setLoading] = useState(true);
 
+            // 커스텀 알림/확인 모달 상태
+            const [modalConfig, setModalConfig] = useState(null); 
+
             // 브랜드 설정 관련 State
             const [brands, setBrands] = useState([]);
             const [selectedBrandId, setSelectedBrandId] = useState('default');
@@ -127,6 +133,14 @@
             const [newBottomSize, setNewBottomSize] = useState('');
 
             const activeBrand = brands.find(b => b.id === selectedBrandId) || { id: 'default', name: '기본 브랜드', topSizes: SIZES, bottomSizes: SIZES, hasSleeve: true, hasShorts: true };
+
+            const customAlert = (message) => {
+                setModalConfig({ message, type: 'alert' });
+            };
+
+            const customConfirm = (message, onConfirm) => {
+                setModalConfig({ message, type: 'confirm', onConfirm });
+            };
 
             useEffect(() => {
                 const initData = async () => {
@@ -188,11 +202,10 @@
             const saveOrdersToFirebase = async (newOrders) => {
                 try {
                     const ordersRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('current_order');
-                    // merge 옵션 없이 완벽히 덮어씌움 (체크 해제 정상 작동)
                     await ordersRef.set({ 
                         data: newOrders,
                         updatedAt: new Date().toISOString()
-                    }); 
+                    }, { merge: true }); // 상태 보존을 위해 merge 필요 (체크해제는 delete 키워드로 처리됨)
                 } catch (e) {
                     console.error("Order save failed:", e);
                 }
@@ -235,9 +248,9 @@
             };
 
             const saveBrand = () => {
-                if (!brandForm.name.trim()) return alert('브랜드명을 입력해주세요.');
-                if (brandForm.topSizes.length === 0) return alert('상의 사이즈를 최소 1개 이상 추가해주세요.');
-                if (brandForm.hasShorts && brandForm.bottomSizes.length === 0) return alert('하의 사이즈를 최소 1개 이상 추가해주세요.');
+                if (!brandForm.name.trim()) return customAlert('브랜드명을 입력해주세요.');
+                if (brandForm.topSizes.length === 0) return customAlert('상의 사이즈를 최소 1개 이상 추가해주세요.');
+                if (brandForm.hasShorts && brandForm.bottomSizes.length === 0) return customAlert('하의 사이즈를 최소 1개 이상 추가해주세요.');
                 
                 const newBrand = {
                     id: brandForm.id || Date.now().toString(),
@@ -256,18 +269,20 @@
                 }
 
                 db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('brands').set({ list: updatedBrands });
-                setBrandForm({ id: '', name: '', sizes: SIZES.join(', '), hasSleeve: true, hasShorts: true });
+                
+                // [BUG FIX] 폼 초기화 시 sizes (문자열) 대신 topSizes, bottomSizes (배열)로 정상 초기화
+                setBrandForm({ id: '', name: '', topSizes: [...SIZES], bottomSizes: [...SIZES], hasSleeve: true, hasShorts: true });
             };
 
             const deleteBrand = (id) => {
-                if(id === 'default') return alert('기본 브랜드는 삭제할 수 없습니다.');
-                if(confirm('이 브랜드를 삭제하시겠습니까?')) {
+                if(id === 'default') return customAlert('기본 브랜드는 삭제할 수 없습니다.');
+                customConfirm('이 브랜드를 삭제하시겠습니까?', () => {
                     const updatedBrands = brands.filter(b => b.id !== id);
                     db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('brands').set({ list: updatedBrands });
                     if(selectedBrandId === id) {
                         handleBrandChange({target: {value: 'default'}});
                     }
-                }
+                });
             };
 
             const editBrand = (brand) => {
@@ -307,7 +322,7 @@
             const exportToCSV = () => {
                 const orderKeys = Object.keys(orders);
                 if (orderKeys.length === 0) {
-                    alert("구매 희망자가 없습니다.");
+                    customAlert("구매 희망자가 없습니다.");
                     return;
                 }
 
@@ -725,6 +740,29 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 커스텀 알림/확인 모달창 (alert/confirm 대체) */}
+                    {modalConfig && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" onClick={() => setModalConfig(null)}>
+                            <div className="bg-white rounded-[32px] p-8 max-w-sm w-full shadow-2xl text-center animate-zoom-in border border-slate-100" onClick={e => e.stopPropagation()}>
+                                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+                                    <Icon.AlertCircle size={32} />
+                                </div>
+                                <p className="text-slate-800 font-black mb-8 text-base">{modalConfig.message}</p>
+                                <div className="flex gap-3">
+                                    {modalConfig.type === 'confirm' && (
+                                        <button onClick={() => setModalConfig(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 font-black rounded-2xl active:scale-95 transition-all text-sm">취소</button>
+                                    )}
+                                    <button onClick={() => {
+                                        if (modalConfig.onConfirm) modalConfig.onConfirm();
+                                        setModalConfig(null);
+                                    }} className="flex-1 py-4 bg-blue-600 text-white hover:bg-blue-700 font-black rounded-2xl active:scale-95 transition-all shadow-md shadow-blue-200 text-sm">
+                                        {modalConfig.type === 'confirm' ? '확인' : '닫기'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
