@@ -934,9 +934,6 @@
 
             // 공통 회원 카드 렌더링 함수
             const renderMemberCard = (m, isCompact = false) => {
-                const membershipInfo = getMembershipStatus(m, targetMonth);
-                const statusType = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
-                
                 return (
                     <div key={m.id} className={`bg-white ${isCompact ? 'p-3 rounded-xl' : 'p-5 sm:p-6 rounded-[32px]'} border border-slate-100 shadow-sm relative group hover:shadow-md transition-all text-left`}>
                         <div className={`flex ${isCompact ? 'items-center gap-3' : 'items-start gap-4'} text-left`}>
@@ -969,12 +966,6 @@
                                 <div className={`flex flex-nowrap items-center gap-1 w-full overflow-x-auto no-scrollbar whitespace-nowrap ${isCompact ? '' : 'pb-1'}`}>
                                     <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border ${getPosColorClass(m.position)} shadow-sm`}>{m.position}</span>
                                     {m.role && m.role !== '회원' && <span className={`flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black ${getRoleBadgeClass(m.role)} shadow-sm uppercase`}>{m.role}</span>}
-                                    
-                                    {!isCompact && monthlyPaymentDates[m.id] && (statusType === 'monthly' || statusType === 'half' || statusType === 'full' || (statusType === 'rest' && !(membershipInfo && membershipInfo.active))) && (
-                                        <span className="flex-shrink-0 text-[9px] font-normal px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            💳 {monthlyPaymentDates[m.id]} 납부
-                                        </span>
-                                    )}
                                 </div>
                                 {!isCompact && (
                                     <div className="mt-1.5 flex flex-col gap-0.5 whitespace-nowrap">
