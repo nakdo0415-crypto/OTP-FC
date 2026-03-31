@@ -934,14 +934,23 @@
 
             // 공통 회원 카드 렌더링 함수
             const renderMemberCard = (m, isCompact = false) => {
+                const membershipInfo = getMembershipStatus(m, targetMonth);
+                const statusType = getMemberStatusType(m, monthlyStatuses, monthlyReasons, targetMonth);
+                
+                // 운영진 여부 확인 및 카드 스타일 분기
+                const isStaff = STAFF_ROLES.includes(m.role);
+                const cardContainerClass = isStaff
+                    ? `bg-indigo-50 border-2 border-indigo-200 shadow-md`
+                    : `bg-white border border-slate-100 shadow-sm`;
+
                 return (
-                    <div key={m.id} className={`bg-white ${isCompact ? 'p-3 rounded-xl' : 'p-5 sm:p-6 rounded-[32px]'} border border-slate-100 shadow-sm relative group hover:shadow-md transition-all text-left`}>
+                    <div key={m.id} className={`${cardContainerClass} ${isCompact ? 'p-3 rounded-xl' : 'p-5 sm:p-6 rounded-[32px]'} relative group hover:shadow-lg transition-all text-left`}>
                         <div className={`flex ${isCompact ? 'items-center gap-3' : 'items-start gap-4'} text-left`}>
                             <div className={`flex-shrink-0 ${isCompact ? 'w-10 h-10 text-base' : 'w-12 h-12 sm:w-14 sm:h-14 text-lg sm:text-xl'} rounded-full flex items-center justify-center font-black shadow-lg ${getGenderPastelClass(m.gender)}`}>{m.level}</div>
                             <div className="flex flex-col min-w-0 flex-1">
                                 <div className={`flex items-center justify-between w-full ${isCompact ? 'mb-0.5' : 'mb-1.5'}`}>
                                     <div className="flex items-center gap-2">
-                                        <h3 className={`${isCompact ? 'text-sm sm:text-base' : 'text-xl sm:text-2xl'} font-black text-slate-900 whitespace-nowrap flex-shrink-0`}>{m.name}</h3>
+                                        <h3 className={`${isCompact ? 'text-sm sm:text-base' : 'text-xl sm:text-2xl'} font-black ${isStaff ? 'text-indigo-950' : 'text-slate-900'} whitespace-nowrap flex-shrink-0`}>{m.name}</h3>
                                         {!isCompact && m.coupleId && (
                                             <span className="flex-shrink-0 inline-flex items-center gap-1 bg-pink-50 text-pink-500 px-2 py-0.5 rounded-full text-[10px] font-black border border-pink-100 shadow-sm">
                                                 <Icon.Heart size={10} className="animate-pulse"/> {getCoupleName(m.coupleId)}
@@ -950,16 +959,16 @@
                                     </div>
                                     {isCompact ? (
                                         <div className="flex flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                                            <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all p-1"><Icon.Edit size={12}/></button>
+                                            <button onClick={() => setEditingMember({...m})} className={`text-slate-400 hover:text-blue-500 ${isStaff ? 'bg-indigo-100 hover:bg-blue-100' : 'bg-slate-50 hover:bg-blue-50'} rounded-lg shadow-none outline-none border-none transition-all p-1`}><Icon.Edit size={12}/></button>
                                         </div>
                                     ) : (
                                         <div className="flex flex-shrink-0 gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                                            <button onClick={() => setEditingMember({...m})} className="text-slate-400 hover:text-blue-500 bg-slate-50 hover:bg-blue-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.Edit size={14}/></button>
+                                            <button onClick={() => setEditingMember({...m})} className={`text-slate-400 hover:text-blue-500 ${isStaff ? 'bg-indigo-100 hover:bg-blue-100' : 'bg-slate-50 hover:bg-blue-50'} rounded-lg shadow-none outline-none border-none transition-all p-1.5`}><Icon.Edit size={14}/></button>
                                             <button onClick={() => {
                                                 setResigningMember(m);
                                                 setResignForm({ date: new Date().toISOString().split('T')[0], reason: '', isForced: false });
-                                            }} className="text-slate-400 hover:text-orange-500 bg-slate-50 hover:bg-orange-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.UserMinus size={14}/></button>
-                                            <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className="text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg shadow-none outline-none border-none transition-all p-1.5"><Icon.Trash size={14}/></button>
+                                            }} className={`text-slate-400 hover:text-orange-500 ${isStaff ? 'bg-indigo-100 hover:bg-orange-100' : 'bg-slate-50 hover:bg-orange-50'} rounded-lg shadow-none outline-none border-none transition-all p-1.5`}><Icon.UserMinus size={14}/></button>
+                                            <button onClick={() => showConfirm("회원 삭제", `${m.name} 님을 영구 삭제하시겠습니까?`, async () => { await getMemberCol().doc(m.id).delete(); })} className={`text-slate-400 hover:text-red-500 ${isStaff ? 'bg-indigo-100 hover:bg-red-100' : 'bg-slate-50 hover:bg-red-50'} rounded-lg shadow-none outline-none border-none transition-all p-1.5`}><Icon.Trash size={14}/></button>
                                         </div>
                                     )}
                                 </div>
