@@ -567,7 +567,7 @@
                         <div className="flex items-center gap-1 text-left text-slate-900 leading-none">
                             <span className="font-black text-slate-800">{p.name}</span>
                             {gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0">W</span>}
-                            {isGuest && <span className="text-[11px] font-black text-slate-800 flex-shrink-0">G</span>}
+                            {isGuest && <span className="text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg flex-shrink-0">G</span>}
                         </div>
                         <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(lvl)}`}>{lvl}</span>
                     </div>
@@ -1159,7 +1159,7 @@
                             {isConfirmed && <div className="bg-green-100 border-2 border-green-400 text-green-700 px-4 py-2 rounded-2xl mb-4 flex items-center justify-center gap-2 animate-fade-in"><Icon.Check /> <span className="font-black text-sm">확정된 편성입니다 (자동 저장 중)</span></div>}
                             {mobileGhost && draggedItem && (
                                 <div ref={ghostCardRef} className="ghost-card bg-white p-3 rounded-2xl border-2 border-blue-500 flex items-center justify-between" style={{ left: mobileGhost.initialX, top: mobileGhost.initialY }}>
-                                    <div className="flex items-center gap-3"><div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 font-black text-xs">{draggedItem.memberIdx + 1}</div><div className="flex flex-col"><div className="flex items-center gap-1"><span className="font-black text-slate-900 text-sm">{mobileGhost.memberData.name}</span>{mobileGhost.memberData.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}{mobileGhost.memberData.isGuest && <span className="text-[11px] font-black text-slate-800">G</span>}</div></div></div><div className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(mobileGhost.memberData.level)}`}>{mobileGhost.memberData.level}</div>
+                                    <div className="flex items-center gap-3"><div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 font-black text-xs">{draggedItem.memberIdx + 1}</div><div className="flex flex-col"><div className="flex items-center gap-1"><span className="font-black text-slate-900 text-sm">{mobileGhost.memberData.name}</span>{mobileGhost.memberData.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}{mobileGhost.memberData.isGuest && <span className="text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg">G</span>}</div></div></div><div className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(mobileGhost.memberData.level)}`}>{mobileGhost.memberData.level}</div>
                                 </div>
                             )}
                             {teams.length === 0 ? <div className="py-20 text-center text-slate-300 font-black">결과가 없습니다.</div> : (
@@ -1196,7 +1196,7 @@
                                                                             <span className="font-black text-slate-800 text-[8px] sm:text-[9px] md:text-xs tracking-tighter whitespace-nowrap">{m.name}</span>
                                                                             {m.gender === '여성' && <span className="text-[7px] md:text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0 leading-none">W</span>}
                                                                             {isPartnerPresent && <span className="text-pink-400 text-[7px] md:text-[10px] flex-shrink-0 flex items-center"><Icon.Heart size={10} /></span>}
-                                                                            {m.isGuest && <span className="text-[11px] font-black text-slate-800 flex-shrink-0 leading-none">G</span>}
+                                                                            {m.isGuest && <span className="text-[7px] md:text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg flex-shrink-0 leading-none">G</span>}
                                                                         </div>
                                                                     </div>
                                                                     <span className={`text-[7px] md:text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag flex-shrink-0 leading-none ml-0.5 ${getLevelColor(m.level)}`}>{m.level}</span>
@@ -1244,7 +1244,7 @@
                                                             <div className="flex items-center gap-1 text-left text-slate-900 leading-none pointer-events-none">
                                                                 <span className="font-black text-slate-800">{m.name}</span>
                                                                 {m.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0">W</span>}
-                                                                {m.isGuest && <span className="text-[11px] font-black text-slate-800 flex-shrink-0">G</span>}
+                                                                {m.isGuest && <span className="text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg flex-shrink-0">G</span>}
                                                             </div>
                                                             <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag pointer-events-none ${getLevelColor(m.level)}`}>{m.level}</span>
                                                         </div>
@@ -1420,7 +1420,7 @@
                                                         <span className="w-6 h-6 flex items-center justify-center rounded-full text-xs font-black bg-slate-200 text-slate-500">{mIdx + 1}</span>
                                                         <span className="font-black text-slate-800 text-base">{m.name}</span>
                                                         {m.gender === '여성' && <span className="text-xs font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}
-                                                        {m.isGuest && <span className="text-sm font-black text-slate-800">G</span>}
+                                                        {m.isGuest && <span className="text-xs font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg">G</span>}
                                                     </div>
                                                     <span className={`text-xs font-black px-1.5 py-0.5 rounded-lg ${getLevelColor(m.level)}`}>{m.level}</span>
                                                 </div>
