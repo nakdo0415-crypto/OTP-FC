@@ -518,6 +518,32 @@
             const waitingList = useMemo(() => allAttendees.slice(maxMemberLimit), [allAttendees, maxMemberLimit]);
             const selectedList = entryList;
 
+            // 미편성 멤버(대기열) 계산 로직
+            const unassignedMembers = useMemo(() => {
+                if (!meetingDate || teams.length === 0) return [];
+                
+                const assignedIds = new Set();
+                teams.forEach(t => t.members.forEach(m => assignedIds.add(m.memberId || m.id)));
+                
+                return allAttendees.filter(a => !assignedIds.has(a.memberId || a.id)).map(p => {
+                    const masterInfo = members.find(m => m.id === p.memberId) || {};
+                    const lvl = parseInt(masterInfo.level || p.level || 99);
+                    const tOrder = masterInfo.tierOrder !== undefined ? masterInfo.tierOrder : 99;
+                    const adjustedPoints = getLevelPoints(lvl);
+                    
+                    return { 
+                        ...p, 
+                        name: masterInfo.name || p.name, 
+                        level: lvl, 
+                        tierOrder: tOrder,
+                        points: adjustedPoints, 
+                        coupleId: masterInfo.coupleId || '', 
+                        gender: masterInfo.gender || p.gender || '남성', 
+                        isGuest: p.isGuest || false 
+                    };
+                });
+            }, [allAttendees, teams, members, meetingDate]);
+
             const levelStats = useMemo(() => {
                 const stats = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
                 selectedList.forEach(p => {
@@ -801,15 +827,29 @@
             const moveItem = (sourceTeamIdx, sourceMemberIdx, targetTeamIdx, targetMemberIdx) => {
                 if (sourceTeamIdx === targetTeamIdx && sourceMemberIdx === targetMemberIdx) return;
                 const newTeams = [...teams];
-                const sourceTeam = newTeams[sourceTeamIdx];
-                const targetTeam = newTeams[targetTeamIdx];
-                const [movedMember] = sourceTeam.members.splice(sourceMemberIdx, 1);
-                if (sourceTeamIdx === targetTeamIdx) { const actualTargetIdx = (targetMemberIdx === null || targetMemberIdx === undefined) ? targetTeam.members.length : targetMemberIdx; targetTeam.members.splice(actualTargetIdx, 0, movedMember); } 
-                else { if (targetMemberIdx === undefined || targetMemberIdx === null) { targetTeam.members.push(movedMember); } else { targetTeam.members.splice(targetMemberIdx, 0, movedMember); } }
-                sourceTeam.scoreSum = sourceTeam.members.reduce((acc, cur) => acc + cur.points, 0);
-                if (sourceTeamIdx !== targetTeamIdx) { targetTeam.scoreSum = targetTeam.members.reduce((acc, cur) => acc + cur.points, 0); }
-                newTeams[sourceTeamIdx].members = reorderMembersWithGenderRule(newTeams[sourceTeamIdx].members);
-                if (sourceTeamIdx !== targetTeamIdx) { newTeams[targetTeamIdx].members = reorderMembersWithGenderRule(newTeams[targetTeamIdx].members); }
+                let movedMember;
+
+                if (sourceTeamIdx === 'unassigned') {
+                    movedMember = unassignedMembers[sourceMemberIdx];
+                } else {
+                    const sourceTeam = newTeams[sourceTeamIdx];
+                    movedMember = sourceTeam.members.splice(sourceMemberIdx, 1)[0];
+                    sourceTeam.scoreSum = sourceTeam.members.reduce((acc, cur) => acc + cur.points, 0);
+                    sourceTeam.members = reorderMembersWithGenderRule(sourceTeam.members);
+                }
+
+                if (targetTeamIdx === 'unassigned') {
+                    // Do nothing, moving to unassigned is just removing from teams
+                } else {
+                    const targetTeam = newTeams[targetTeamIdx];
+                    const actualTargetIdx = (targetMemberIdx === null || targetMemberIdx === undefined) ? targetTeam.members.length : targetMemberIdx;
+                    targetTeam.members.splice(actualTargetIdx, 0, movedMember);
+                    targetTeam.scoreSum = targetTeam.members.reduce((acc, cur) => acc + cur.points, 0);
+                    if (sourceTeamIdx !== targetTeamIdx) {
+                        targetTeam.members = reorderMembersWithGenderRule(targetTeam.members);
+                    }
+                }
+                
                 setTeams(newTeams);
             };
 
@@ -843,8 +883,17 @@
                     const element = document.elementFromPoint(touch.clientX, touch.clientY);
                     if (element) {
                         const memberEl = element.closest('[data-member-idx]'); const teamEl = element.closest('[data-team-idx]');
-                        if (memberEl) { const tIdx = parseInt(memberEl.dataset.teamIdx); const mIdx = parseInt(memberEl.dataset.memberIdx); if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== mIdx) { setDragOverItem({ teamIdx: tIdx, memberIdx: mIdx }); } } 
-                        else if (teamEl) { const tIdx = parseInt(teamEl.dataset.teamIdx); if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== null) { setDragOverItem({ teamIdx: tIdx, memberIdx: null }); } }
+                        if (memberEl) { 
+                            let tIdx = memberEl.dataset.teamIdx; 
+                            tIdx = tIdx === 'unassigned' ? 'unassigned' : parseInt(tIdx);
+                            const mIdx = parseInt(memberEl.dataset.memberIdx); 
+                            if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== mIdx) { setDragOverItem({ teamIdx: tIdx, memberIdx: mIdx }); } 
+                        } 
+                        else if (teamEl) { 
+                            let tIdx = teamEl.dataset.teamIdx; 
+                            tIdx = tIdx === 'unassigned' ? 'unassigned' : parseInt(tIdx);
+                            if (dragOverItem?.teamIdx !== tIdx || dragOverItem?.memberIdx !== null) { setDragOverItem({ teamIdx: tIdx, memberIdx: null }); } 
+                        }
                     }
                 } else {
                     const moveX = Math.abs(touch.clientX - touchStartPos.current.x); 
@@ -1110,7 +1159,7 @@
                             {isConfirmed && <div className="bg-green-100 border-2 border-green-400 text-green-700 px-4 py-2 rounded-2xl mb-4 flex items-center justify-center gap-2 animate-fade-in"><Icon.Check /> <span className="font-black text-sm">확정된 편성입니다 (자동 저장 중)</span></div>}
                             {mobileGhost && draggedItem && (
                                 <div ref={ghostCardRef} className="ghost-card bg-white p-3 rounded-2xl border-2 border-blue-500 flex items-center justify-between" style={{ left: mobileGhost.initialX, top: mobileGhost.initialY }}>
-                                    <div className="flex items-center gap-3"><div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 font-black text-xs">{draggedItem.memberIdx + 1}</div><div className="flex flex-col"><div className="flex items-center gap-1"><span className="font-black text-slate-900 text-sm">{mobileGhost.memberData.name}</span>{mobileGhost.memberData.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}{mobileGhost.memberData.isGuest && <span className="text-[12px] font-black text-slate-900">G</span>}</div></div></div><div className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(mobileGhost.memberData.level)}`}>{mobileGhost.memberData.level}</div>
+                                    <div className="flex items-center gap-3"><div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 font-black text-xs">{draggedItem.memberIdx + 1}</div><div className="flex flex-col"><div className="flex items-center gap-1"><span className="font-black text-slate-900 text-sm">{mobileGhost.memberData.name}</span>{mobileGhost.memberData.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}{mobileGhost.memberData.isGuest && <span className="text-[11px] font-black text-slate-800">G</span>}</div></div></div><div className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(mobileGhost.memberData.level)}`}>{mobileGhost.memberData.level}</div>
                                 </div>
                             )}
                             {teams.length === 0 ? <div className="py-20 text-center text-slate-300 font-black">결과가 없습니다.</div> : (
@@ -1147,7 +1196,7 @@
                                                                             <span className="font-black text-slate-800 text-[8px] sm:text-[9px] md:text-xs tracking-tighter whitespace-nowrap">{m.name}</span>
                                                                             {m.gender === '여성' && <span className="text-[7px] md:text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0 leading-none">W</span>}
                                                                             {isPartnerPresent && <span className="text-pink-400 text-[7px] md:text-[10px] flex-shrink-0 flex items-center"><Icon.Heart size={10} /></span>}
-                                                                            {m.isGuest && <span className="text-[9px] md:text-[12px] font-black text-slate-800 flex-shrink-0 leading-none">G</span>}
+                                                                            {m.isGuest && <span className="text-[11px] font-black text-slate-800 flex-shrink-0 leading-none">G</span>}
                                                                         </div>
                                                                     </div>
                                                                     <span className={`text-[7px] md:text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag flex-shrink-0 leading-none ml-0.5 ${getLevelColor(m.level)}`}>{m.level}</span>
@@ -1160,6 +1209,52 @@
                                             </div>
                                         ))}
                                     </div>
+                                    
+                                    {/* 대기열(미편성) 멤버 UI 구현부 */}
+                                    {unassignedMembers.length > 0 && (
+                                        <div 
+                                            className={`mt-8 bg-slate-50 rounded-3xl p-6 border-2 border-dashed transition-all ${dragOverItem?.teamIdx === 'unassigned' ? 'border-blue-400 bg-blue-50/50' : 'border-slate-300'}`}
+                                            data-team-idx="unassigned"
+                                            onDragOver={(e) => {e.preventDefault(); handleDragOver(e, 'unassigned', null);}}
+                                            onDrop={(e) => {e.preventDefault(); handleDrop(e, 'unassigned', null);}}
+                                            onTouchMove={handleTouchMove} 
+                                            onTouchEnd={handleTouchEnd}
+                                        >
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">미편성 멤버 대기열</h3>
+                                                <span className="text-xs font-bold text-slate-400">{unassignedMembers.length}명</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {unassignedMembers.map((m, mIdx) => {
+                                                    const isDragging = draggedItem?.teamIdx === 'unassigned' && draggedItem?.memberIdx === mIdx;
+                                                    return (
+                                                        <div
+                                                            key={m.id}
+                                                            data-team-idx="unassigned"
+                                                            data-member-idx={mIdx}
+                                                            draggable
+                                                            onDragStart={(e) => handleDragStart(e, 'unassigned', mIdx)}
+                                                            onDragOver={(e) => {e.preventDefault(); e.stopPropagation(); handleDragOver(e, 'unassigned', mIdx);}}
+                                                            onDragEnd={handleDragEnd}
+                                                            onDrop={(e) => {e.stopPropagation(); handleDrop(e, 'unassigned', mIdx);}}
+                                                            onTouchStart={(e) => handleTouchStart(e, 'unassigned', mIdx, m)}
+                                                            onContextMenu={handleContextMenu}
+                                                            className={`px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 shadow-sm cursor-move hover:border-blue-300 transition-all select-none touch-action-none ${isDragging ? 'opacity-50 scale-95 border-dashed border-blue-400 bg-blue-50' : ''}`}
+                                                        >
+                                                            <div className="flex items-center gap-1 text-left text-slate-900 leading-none pointer-events-none">
+                                                                <span className="font-black text-slate-800">{m.name}</span>
+                                                                {m.gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0">W</span>}
+                                                                {m.isGuest && <span className="text-[11px] font-black text-slate-800 flex-shrink-0">G</span>}
+                                                            </div>
+                                                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag pointer-events-none ${getLevelColor(m.level)}`}>{m.level}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {dragOverItem?.teamIdx === 'unassigned' && <div className="px-6 py-2 border-2 border-dashed border-blue-400 bg-blue-50/50 rounded-xl text-blue-500 font-bold text-xs flex items-center justify-center pointer-events-none animate-pulse">여기로 이동</div>}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="mt-10 p-6 bg-white rounded-[40px] border border-slate-200 shadow-lg space-y-6 max-w-4xl mx-auto text-left text-slate-900">
                                         <div className="flex flex-col sm:flex-row gap-3 justify-center text-left">
                                             <button onClick={resetTeams} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all text-left outline-none"><Icon.RotateCcw /> 초기화</button>
