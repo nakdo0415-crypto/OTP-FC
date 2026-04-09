@@ -232,7 +232,7 @@
             Clock: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
             AlertCircle: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
             Info: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-            Settings: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+            Settings: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
             Upload: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
             Check: ({size=14, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
             Folder: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
@@ -260,6 +260,9 @@
 
             // 상태 추가: 특정 인원을 편성에서 수동 제외하기 위함
             const [excludedFromDraft, setExcludedFromDraft] = useState([]);
+            
+            // 상태 추가: 팀 전체 교체용
+            const [selectedTeamForSwap, setSelectedTeamForSwap] = useState(null);
 
             const [teamingSettings, setTeamingSettings] = useState({ teamCount: 3, keepCouples: true, avoidOverlap: true });
             const [teams, setTeams] = useState([]);
@@ -298,6 +301,11 @@
             const [capturedImage, setCapturedImage] = useState(null);
 
             const teamRefs = useRef([]);
+
+            // 탭 변경 시 선택 초기화
+            useEffect(() => {
+                setSelectedTeamForSwap(null);
+            }, [activeTab]);
 
             // 이전 확정 기록 기반 중복 체크용 Map 생성
             const pastTeammatesMap = useMemo(() => {
@@ -589,7 +597,7 @@
                             {gender === '여성' && <span className="text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0">W</span>}
                             {isGuest && <span className="text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg flex-shrink-0">G</span>}
                         </div>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag ${getLevelColor(lvl)}`}>{lvl}</span>
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg level-tag pointer-events-none ${getLevelColor(lvl)}`}>{lvl}</span>
                     </button>
                 );
             };
@@ -871,6 +879,29 @@
                 }
                 
                 setTeams(newTeams);
+            };
+
+            // 팀 전체 교체 로직
+            const handleTeamSwapClick = (teamIdx) => {
+                if (selectedTeamForSwap === null) {
+                    setSelectedTeamForSwap(teamIdx);
+                } else if (selectedTeamForSwap === teamIdx) {
+                    setSelectedTeamForSwap(null);
+                } else {
+                    const newTeams = [...teams];
+                    const teamA = newTeams[selectedTeamForSwap];
+                    const teamB = newTeams[teamIdx];
+
+                    const tempMembers = teamA.members;
+                    teamA.members = teamB.members;
+                    teamB.members = tempMembers;
+
+                    teamA.scoreSum = Math.round(teamA.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
+                    teamB.scoreSum = Math.round(teamB.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
+
+                    setTeams(newTeams);
+                    setSelectedTeamForSwap(null);
+                }
             };
 
             const handleDragStart = (e, teamIdx, memberIdx) => { setDraggedItem({ teamIdx, memberIdx }); e.dataTransfer.effectAllowed = 'move'; };
@@ -1185,11 +1216,29 @@
                             )}
                             {teams.length === 0 ? <div className="py-20 text-center text-slate-300 font-black">결과가 없습니다.</div> : (
                                 <>
+                                    <div className="mb-4 text-center">
+                                        <span className="text-[10px] sm:text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 flex items-center justify-center gap-1 w-fit mx-auto">
+                                            <Icon.Info size={14} /> 팀 헤더(Team 1 등)를 클릭하면 두 팀을 통째로 교체할 수 있습니다.
+                                        </span>
+                                    </div>
                                     <div className="grid gap-1.5 md:gap-4 text-left" style={{ gridTemplateColumns: `repeat(${teams.length}, minmax(0, 1fr))` }}>
                                         {teams.map((team, idx) => (
-                                            <div key={idx} ref={el => teamRefs.current[idx] = el} className="team-card bg-white rounded-2xl md:rounded-[32px] shadow-lg md:shadow-xl overflow-hidden border border-slate-100 text-left h-full flex flex-col" data-team-idx={idx} onDragOver={(e) => {e.preventDefault(); handleDragOver(e, idx, null);}} onDrop={(e) => {e.preventDefault(); handleDrop(e, idx, null);}} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-                                                <div className={`p-2 md:p-3 text-center font-black flex flex-col justify-between px-2 md:px-5 ${getTeamBadgeColor(idx)}`}>
-                                                    <div className="flex justify-between items-center w-full mb-1">
+                                            <div 
+                                                key={idx} 
+                                                ref={el => teamRefs.current[idx] = el} 
+                                                className={`team-card bg-white rounded-2xl md:rounded-[32px] shadow-lg md:shadow-xl overflow-hidden border text-left h-full flex flex-col transition-all ${selectedTeamForSwap === idx ? 'border-indigo-500 ring-2 ring-indigo-200 transform -translate-y-1' : 'border-slate-100'}`} 
+                                                data-team-idx={idx} 
+                                                onDragOver={(e) => {e.preventDefault(); handleDragOver(e, idx, null);}} 
+                                                onDrop={(e) => {e.preventDefault(); handleDrop(e, idx, null);}} 
+                                                onTouchMove={handleTouchMove} 
+                                                onTouchEnd={handleTouchEnd}
+                                            >
+                                                <div 
+                                                    className={`p-2 md:p-3 text-center font-black flex flex-col justify-between px-2 md:px-5 cursor-pointer transition-all ${getTeamBadgeColor(idx)} ${selectedTeamForSwap === idx ? 'opacity-80' : 'hover:opacity-90'}`}
+                                                    onClick={() => handleTeamSwapClick(idx)}
+                                                    title="클릭하여 다른 팀과 통째로 교환"
+                                                >
+                                                    <div className="flex justify-between items-center w-full mb-1 pointer-events-none">
                                                         <span className="text-[7px] md:text-[9px] opacity-90 tracking-widest uppercase inline-block">
                                                             {idx < 3 ? 'IAMGROUND' : 'PLAB'}
                                                         </span>
@@ -1197,8 +1246,10 @@
                                                             {team.scoreSum} pts
                                                         </span>
                                                     </div>
-                                                    <div className="flex justify-between items-center w-full">
-                                                        <span className="text-[10px] md:text-base uppercase tracking-tight whitespace-nowrap">Team {idx + 1}</span>
+                                                    <div className="flex justify-between items-center w-full pointer-events-none">
+                                                        <span className="text-[10px] md:text-base uppercase tracking-tight whitespace-nowrap">
+                                                            {selectedTeamForSwap === idx ? '교체 선택됨...' : `Team ${idx + 1}`}
+                                                        </span>
                                                         <span className="text-[8px] md:text-[10px] font-bold opacity-80 uppercase whitespace-nowrap">{team.members.length} 명</span>
                                                     </div>
                                                 </div>
