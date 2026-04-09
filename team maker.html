@@ -920,12 +920,44 @@
                     teamA.members = teamB.members;
                     teamB.members = tempMembers;
 
-                    teamA.scoreSum = teamA.members.reduce((acc, cur) => acc + cur.points, 0);
-                    teamB.scoreSum = teamB.members.reduce((acc, cur) => acc + cur.points, 0);
+                    teamA.scoreSum = Math.round(teamA.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
+                    teamB.scoreSum = Math.round(teamB.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
 
                     setTeams(newTeams);
                     setSelectedTeamForSwap(null);
                 }
+            };
+
+            // 바로 그 자리에서 팀 개수 수동 조절 (재편성 없이 빈 팀 추가/삭제)
+            const handleAdjustTeamCount = (newCount) => {
+                if (newCount < 2 || newCount > 8) return;
+                
+                const newTeams = [...teams];
+                if (newCount > teams.length) {
+                    // 빈 팀 추가
+                    for (let i = teams.length; i < newCount; i++) {
+                        newTeams.push({
+                            id: i,
+                            members: [],
+                            scoreSum: 0,
+                            capacity: 99 // 수동 조절 시 제한 없음
+                        });
+                    }
+                } else if (newCount < teams.length) {
+                    // 뒷 번호 팀부터 삭제
+                    const teamsToRemove = newTeams.slice(newCount);
+                    const hasMembers = teamsToRemove.some(t => t.members.length > 0);
+                    if (hasMembers) {
+                        if (!window.confirm("삭제되는 팀에 있던 멤버들은 미편성 대기열로 자동 이동됩니다. 삭제하시겠습니까?")) {
+                            return;
+                        }
+                    }
+                    newTeams.splice(newCount);
+                }
+                
+                setTeams(newTeams);
+                setTeamingSettings(prev => ({...prev, teamCount: newCount}));
+                setIsConfirmed(false); // 수동 조작 시 확정 상태 해제
             };
 
             const handleDragStart = (e, teamIdx, memberIdx) => { setDraggedItem({ teamIdx, memberIdx }); e.dataTransfer.effectAllowed = 'move'; };
@@ -1196,7 +1228,7 @@
                                     <div className="flex flex-col gap-2 text-left text-slate-900">
                                         <label className="text-[10px] font-black text-slate-400 ml-1 uppercase text-left">Team Count</label>
                                         <select className="p-4 bg-slate-50 rounded-2xl font-black text-sm text-left outline-none border-none h-full" value={teamingSettings.teamCount} onChange={e => setTeamingSettings({...teamingSettings, teamCount: parseInt(e.target.value)})}>
-                                            {[2,3,4,5,6].map(v => <option key={v} value={v}>{v}개 팀 균등 편성</option>)}
+                                            {[2,3,4,5,6,7,8].map(v => <option key={v} value={v}>{v}개 팀 균등 편성</option>)}
                                         </select>
                                     </div>
                                     <div className="flex flex-col gap-2">
@@ -1240,10 +1272,18 @@
                             )}
                             {teams.length === 0 ? <div className="py-20 text-center text-slate-300 font-black">결과가 없습니다.</div> : (
                                 <>
-                                    <div className="mb-4 text-center">
-                                        <span className="text-[10px] sm:text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 flex items-center justify-center gap-1 w-fit mx-auto">
-                                            <Icon.Info size={14} /> 팀 헤더(Team 1 등)를 클릭하면 두 팀을 통째로 교체할 수 있습니다.
+                                    <div className="mb-4 flex flex-col sm:flex-row justify-center items-center gap-3">
+                                        <span className="text-[10px] sm:text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 flex items-center justify-center gap-1 w-fit">
+                                            <Icon.Info size={14} /> 팀 헤더를 클릭하여 통째로 교체
                                         </span>
+                                        <div className="flex items-center gap-2 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm w-fit">
+                                            <span className="text-[10px] sm:text-xs font-black text-slate-600 pl-1">팀 수 조절</span>
+                                            <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-xl border border-slate-100">
+                                                <button onClick={() => handleAdjustTeamCount(teams.length - 1)} disabled={teams.length <= 2} className="w-6 h-6 flex items-center justify-center bg-white rounded-lg shadow-sm font-black text-slate-600 hover:text-blue-600 disabled:opacity-50">-</button>
+                                                <span className="text-xs sm:text-sm font-black text-slate-800 w-5 text-center">{teams.length}</span>
+                                                <button onClick={() => handleAdjustTeamCount(teams.length + 1)} disabled={teams.length >= 8} className="w-6 h-6 flex items-center justify-center bg-white rounded-lg shadow-sm font-black text-slate-600 hover:text-blue-600 disabled:opacity-50">+</button>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="grid gap-1.5 md:gap-4 text-left" style={{ gridTemplateColumns: `repeat(${teams.length}, minmax(0, 1fr))` }}>
                                         {teams.map((team, idx) => (
