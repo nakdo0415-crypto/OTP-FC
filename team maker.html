@@ -573,6 +573,30 @@
                 return stats;
             }, [activeSelectedList, members]);
 
+            // 커플끼리 구별되는 색상을 부여하기 위한 매핑 로직 (카드 배경/테두리용)
+            const coupleColorMap = useMemo(() => {
+                const map = {};
+                let colorIndex = 0;
+                // 배경색과 테두리색 조합으로 변경
+                const colors = [
+                    'bg-red-50 border-red-200', 'bg-blue-50 border-blue-200', 
+                    'bg-emerald-50 border-emerald-200', 'bg-violet-50 border-violet-200', 
+                    'bg-amber-50 border-amber-200', 'bg-cyan-50 border-cyan-200', 
+                    'bg-fuchsia-50 border-fuchsia-200'
+                ];
+                members.forEach(m => {
+                    if (m.coupleId) {
+                        const pairId = [m.id, m.coupleId].sort().join('-');
+                        if (!map[pairId]) {
+                            map[pairId] = colors[colorIndex % colors.length];
+                            colorIndex++;
+                        }
+                        map[m.id] = map[pairId];
+                    }
+                });
+                return map;
+            }, [members]);
+
             const renderPlayerCard = (p) => {
                 const masterInfo = members.find(m => m.id === p.memberId) || {};
                 const lvl = masterInfo.level || p.level;
@@ -896,8 +920,8 @@
                     teamA.members = teamB.members;
                     teamB.members = tempMembers;
 
-                    teamA.scoreSum = Math.round(teamA.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
-                    teamB.scoreSum = Math.round(teamB.members.reduce((acc, cur) => acc + cur.points, 0) * 100) / 100;
+                    teamA.scoreSum = teamA.members.reduce((acc, cur) => acc + cur.points, 0);
+                    teamB.scoreSum = teamB.members.reduce((acc, cur) => acc + cur.points, 0);
 
                     setTeams(newTeams);
                     setSelectedTeamForSwap(null);
@@ -1258,16 +1282,21 @@
                                                         const isPartnerPresent = m.coupleId && selectedList.some(p => p.memberId === m.coupleId);
                                                         const isDragging = draggedItem?.teamIdx === idx && draggedItem?.memberIdx === mIdx;
                                                         const isDragTarget = dragOverItem?.teamIdx === idx && dragOverItem?.memberIdx === mIdx;
+                                                        
+                                                        // 커플일 경우 고유 배경/테두리 적용, 아닐 경우 기본 스타일
+                                                        const cardBgStyle = (isPartnerPresent && coupleColorMap[m.memberId || m.id]) 
+                                                            ? coupleColorMap[m.memberId || m.id] 
+                                                            : 'bg-slate-50 border-slate-100/50 md:border-transparent hover:bg-blue-50 hover:border-blue-300';
+
                                                         return (
                                                             <div key={mIdx} data-team-idx={idx} data-member-idx={mIdx} draggable onDragStart={(e) => handleDragStart(e, idx, mIdx)} onDragOver={(e) => {e.preventDefault(); e.stopPropagation(); handleDragOver(e, idx, mIdx);}} onDragEnd={handleDragEnd} onDrop={(e) => {e.stopPropagation(); handleDrop(e, idx, mIdx);}} onTouchStart={(e) => handleTouchStart(e, idx, mIdx, m)} onContextMenu={handleContextMenu} className={`relative transition-all duration-200 touch-action-none ${isDragging ? 'dragging' : ''} ${isDragTarget ? 'pt-12' : ''}`}>
                                                                 {isDragTarget && <div className="absolute top-0 left-0 right-0 h-10 border-2 border-dashed border-blue-400 bg-blue-50/50 rounded-xl flex items-center justify-center pointer-events-none transform -translate-y-1"><span className="text-blue-500 font-bold text-xs">이 위치로 이동</span></div>}
-                                                                <div className={`flex items-center justify-between p-1 sm:p-1.5 gap-0.5 bg-slate-50 rounded md:rounded-xl transition-all shadow-sm border border-slate-100/50 md:border-transparent cursor-move select-none ${!isDragging ? 'hover:bg-blue-50 hover:border-blue-300 hover:shadow-md hover:scale-[1.02] hover:z-10 relative' : ''}`}>
+                                                                <div className={`flex items-center justify-between p-1 sm:p-1.5 gap-0.5 rounded md:rounded-xl transition-all shadow-sm border cursor-move select-none ${cardBgStyle} ${!isDragging ? 'hover:shadow-md hover:scale-[1.02] hover:z-10 relative' : ''}`}>
                                                                     <div className="flex items-center gap-0.5 flex-1 min-w-0">
                                                                         <span className="w-3.5 h-3.5 md:w-5 md:h-5 flex items-center justify-center rounded-full text-[7px] md:text-[9px] font-black flex-shrink-0 bg-slate-200 text-slate-500">{mIdx + 1}</span>
                                                                         <div className="flex items-center gap-0.5 text-slate-900 leading-none flex-nowrap whitespace-nowrap overflow-hidden">
                                                                             <span className="font-black text-slate-800 text-[8px] sm:text-[9px] md:text-xs tracking-tighter whitespace-nowrap">{m.name}</span>
                                                                             {m.gender === '여성' && <span className="text-[7px] md:text-[10px] font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg flex-shrink-0 leading-none">W</span>}
-                                                                            {isPartnerPresent && <span className="text-pink-400 text-[7px] md:text-[10px] flex-shrink-0 flex items-center"><Icon.Heart size={10} /></span>}
                                                                             {m.isGuest && <span className="text-[7px] md:text-[10px] font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg flex-shrink-0 leading-none">G</span>}
                                                                         </div>
                                                                     </div>
@@ -1486,17 +1515,24 @@
                                             <span className="text-sm opacity-90">{team.scoreSum} pts</span>
                                         </div>
                                         <div className="p-4 space-y-2 flex-grow">
-                                            {team.members?.map((m, mIdx) => (
-                                                <div key={mIdx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-6 h-6 flex items-center justify-center rounded-full text-xs font-black bg-slate-200 text-slate-500">{mIdx + 1}</span>
-                                                        <span className="font-black text-slate-800 text-base">{m.name}</span>
-                                                        {m.gender === '여성' && <span className="text-xs font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}
-                                                        {m.isGuest && <span className="text-xs font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg">G</span>}
+                                            {team.members?.map((m, mIdx) => {
+                                                const isPartnerPresent = m.coupleId && previewModalData.teams.some(pt => pt.members.some(pm => pm.memberId === m.coupleId || pm.id === m.coupleId));
+                                                const cardBgStyle = (isPartnerPresent && coupleColorMap[m.memberId || m.id]) 
+                                                    ? coupleColorMap[m.memberId || m.id] 
+                                                    : 'bg-slate-50 border-slate-100';
+
+                                                return (
+                                                    <div key={mIdx} className={`flex items-center justify-between p-3 rounded-xl border ${cardBgStyle}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-6 h-6 flex items-center justify-center rounded-full text-xs font-black bg-slate-200 text-slate-500">{mIdx + 1}</span>
+                                                            <span className="font-black text-slate-800 text-base">{m.name}</span>
+                                                            {m.gender === '여성' && <span className="text-xs font-black px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded-lg">W</span>}
+                                                            {m.isGuest && <span className="text-xs font-black px-1.5 py-0.5 bg-slate-800 text-white rounded-lg">G</span>}
+                                                        </div>
+                                                        <span className={`text-xs font-black px-1.5 py-0.5 rounded-lg ${getLevelColor(m.level)}`}>{m.level}</span>
                                                     </div>
-                                                    <span className={`text-xs font-black px-1.5 py-0.5 rounded-lg ${getLevelColor(m.level)}`}>{m.level}</span>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}
