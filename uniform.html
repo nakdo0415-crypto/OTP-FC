@@ -118,6 +118,7 @@
 
         function App() {
             const [members, setMembers] = useState([]);
+            // orders 구조: { [memberId]: { isManual, name, gender, items: [ { id, topSize, bottomSize, sleeveType, number, printName, includeShorts } ] } }
             const [orders, setOrders] = useState({}); 
             const [activeTab, setActiveTab] = useState('selection');
             const [loading, setLoading] = useState(true);
@@ -137,7 +138,6 @@
             const [isManualModalOpen, setIsManualModalOpen] = useState(false);
             const [manualForm, setManualForm] = useState({ name: '', gender: '남성' });
             
-            // [정렬 고정 상태] null 이면 기본 정렬, 배열이면 클릭 시 고정된 정렬 순서 유지
             const [customOrder, setCustomOrder] = useState(null);
             const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
@@ -163,7 +163,6 @@
 
                 const unsubAuth = auth.onAuthStateChanged(user => {
                     if (user) {
-                        // 1. 회원 명단 구독
                         const membersRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('members');
                         const unsubMembers = membersRef.onSnapshot(snap => {
                             const fetchedMembers = snap.docs
@@ -174,22 +173,43 @@
                             setLoading(false);
                         });
 
-                        // 2. 주문 데이터 구독
                         const ordersRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('current_order');
                         const unsubOrders = ordersRef.onSnapshot(docSnap => {
                             if (docSnap.exists && docSnap.data().data) {
-                                setOrders(docSnap.data().data);
+                                // 마이그레이션: 기존 단일 품목 포맷을 배열(다중 품목) 포맷으로 자동 변환하여 로드
+                                const rawData = docSnap.data().data;
+                                const migratedData = {};
+                                Object.keys(rawData).forEach(key => {
+                                    const val = rawData[key];
+                                    if (val.items) {
+                                        migratedData[key] = val;
+                                    } else {
+                                        migratedData[key] = {
+                                            isManual: val.isManual || false,
+                                            name: val.name || '',
+                                            gender: val.gender || '',
+                                            items: [{
+                                                id: `item_${key}_old`,
+                                                topSize: val.topSize || val.size || '100(L)',
+                                                bottomSize: val.bottomSize || '100(L)',
+                                                sleeveType: val.sleeveType || '반팔',
+                                                number: val.number || '',
+                                                printName: val.printName || '',
+                                                includeShorts: val.includeShorts || false
+                                            }]
+                                        };
+                                    }
+                                });
+                                setOrders(migratedData);
                             }
                             if (docSnap.exists && docSnap.data().brandId) {
                                 setSelectedBrandId(docSnap.data().brandId);
                             }
                         });
 
-                        // 3. 브랜드 목록 구독
                         const brandsRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('brands');
                         const unsubBrands = brandsRef.onSnapshot(docSnap => {
                             if (docSnap.exists && docSnap.data().list) {
-                                // 기존 등록된 브랜드 하위 호환성
                                 const loadedBrands = docSnap.data().list.map(b => ({
                                     ...b,
                                     topSizes: b.topSizes || b.sizes || SIZES,
@@ -226,28 +246,63 @@
                     delete newOrders[member.id];
                 } else {
                     newOrders[member.id] = { 
-                        topSize: activeBrand.topSizes[0] || '100(L)', 
-                        bottomSize: activeBrand.bottomSizes[0] || '100(L)', 
-                        sleeveType: '반팔',
-                        number: '', 
-                        printName: member.name, 
-                        includeShorts: false 
+                        isManual: member.isManual || false,
+                        name: member.name,
+                        gender: member.gender,
+                        items: [{
+                            id: `item_${Date.now()}`,
+                            topSize: activeBrand.topSizes[0] || '100(L)', 
+                            bottomSize: activeBrand.bottomSizes[0] || '100(L)', 
+                            sleeveType: '반팔',
+                            number: '', 
+                            printName: member.name, 
+                            includeShorts: false 
+                        }]
                     };
                 }
                 setOrders(newOrders);
                 saveOrdersToFirebase(newOrders);
             };
 
-            const updateOrderDetail = (memberId, field, value) => {
-                const newOrders = { 
-                    ...orders, 
-                    [memberId]: { ...orders[memberId], [field]: value } 
-                };
+            // 품목 1벌 추가 기능
+            const addOrderItem = (memberId, defaultPrintName) => {
+                const newOrders = { ...orders };
+                newOrders[memberId].items.push({
+                    id: `item_${Date.now()}_${Math.random()}`,
+                    topSize: activeBrand.topSizes[0] || '100(L)', 
+                    bottomSize: activeBrand.bottomSizes[0] || '100(L)', 
+                    sleeveType: '반팔',
+                    number: '', 
+                    printName: defaultPrintName, 
+                    includeShorts: false 
+                });
                 setOrders(newOrders);
                 saveOrdersToFirebase(newOrders);
             };
 
-            // 브랜드 설정 및 변경 관련 기능
+            // 개별 품목 삭제 기능
+            const removeOrderItem = (memberId, itemId) => {
+                const newOrders = { ...orders };
+                const filteredItems = newOrders[memberId].items.filter(item => item.id !== itemId);
+                if (filteredItems.length === 0) {
+                    // 모든 품목이 삭제되면 명단에서 선택 해제
+                    delete newOrders[memberId];
+                } else {
+                    newOrders[memberId].items = filteredItems;
+                }
+                setOrders(newOrders);
+                saveOrdersToFirebase(newOrders);
+            };
+
+            const updateOrderDetail = (memberId, itemId, field, value) => {
+                const newOrders = { ...orders };
+                newOrders[memberId].items = newOrders[memberId].items.map(item => 
+                    item.id === itemId ? { ...item, [field]: value } : item
+                );
+                setOrders(newOrders);
+                saveOrdersToFirebase(newOrders);
+            };
+
             const handleBrandChange = (e) => {
                 const newBrandId = e.target.value;
                 setSelectedBrandId(newBrandId);
@@ -337,12 +392,15 @@
                         isManual: true,
                         name: manualForm.name.trim(),
                         gender: manualForm.gender,
-                        topSize: activeBrand.topSizes[0] || '100(L)', 
-                        bottomSize: activeBrand.bottomSizes[0] || '100(L)', 
-                        sleeveType: '반팔',
-                        number: '', 
-                        printName: manualForm.name.trim(), 
-                        includeShorts: false 
+                        items: [{
+                            id: `item_${Date.now()}`,
+                            topSize: activeBrand.topSizes[0] || '100(L)', 
+                            bottomSize: activeBrand.bottomSizes[0] || '100(L)', 
+                            sleeveType: '반팔',
+                            number: '', 
+                            printName: manualForm.name.trim(), 
+                            includeShorts: false 
+                        }]
                     }
                 };
                 
@@ -350,12 +408,9 @@
                 saveOrdersToFirebase(newOrders);
                 setIsManualModalOpen(false);
                 setManualForm({ name: '', gender: '남성' });
-                customAlert(`${manualForm.name.trim()} 님이 직접 추가되었습니다.`);
             };
 
-            // 정렬 버튼을 눌렀을 때만 발동하여 순서를 고정하는 함수
             const applySort = (type) => {
-                // 같은 버튼을 또 누르면 방향(오름차순/내림차순)을 반대로 토글
                 const newDirection = sortConfig.key === type && sortConfig.direction === 'asc' ? 'desc' : 'asc';
                 setSortConfig({ key: type, direction: newDirection });
 
@@ -370,38 +425,34 @@
                     if (type === 'name') {
                         comp = nameA.localeCompare(nameB);
                     } else if (type === 'size') {
-                        const sizeA = orderA.topSize || orderA.size || '';
-                        const sizeB = orderB.topSize || orderB.size || '';
-                        // 사이즈 안의 숫자를 추출해 정렬 (예: 85 -> 90 -> 95)
+                        // 첫 번째 아이템의 상의 사이즈 기준으로 정렬
+                        const sizeA = orderA.items?.[0]?.topSize || '';
+                        const sizeB = orderB.items?.[0]?.topSize || '';
                         const numA = parseInt(sizeA.match(/\d+/)?.[0] || '0', 10);
                         const numB = parseInt(sizeB.match(/\d+/)?.[0] || '0', 10);
                         
                         if (numA !== numB) {
                             comp = numA - numB;
                         } else {
-                            // 사이즈가 같으면 이름순 정렬
                             comp = nameA.localeCompare(nameB);
                         }
                     }
                     
-                    // 내림차순일 경우 결과값을 반대로 뒤집음
                     return newDirection === 'asc' ? comp : -comp;
                 });
                 
                 setCustomOrder(sorted);
             };
 
-            const orderedCount = Object.keys(orders).length;
+            // 전체 주문 품목의 수 (벌 수)
+            const totalOrderedItemsCount = Object.values(orders).reduce((acc, curr) => acc + (curr.items ? curr.items.length : 0), 0);
             
-            // 핵심 렌더링 아이디 배열 추출 (고정된 정렬 유지)
             let renderIds = Object.keys(orders);
             if (customOrder) {
-                // 커스텀 정렬 적용 + 새롭게 추가된 데이터 꼬리 붙이기
                 const validCustom = customOrder.filter(id => orders[id]);
                 const newlyAdded = renderIds.filter(id => !validCustom.includes(id));
                 renderIds = [...validCustom, ...newlyAdded];
             } else {
-                // 기본 정렬: Firebase가 무작위로 섞는 걸 방지하기 위해 기본 이름순 강제
                 renderIds.sort((a, b) => {
                     const nameA = orders[a].isManual ? orders[a].name : (members.find(m => m.id === a)?.name || '');
                     const nameB = orders[b].isManual ? orders[b].name : (members.find(m => m.id === b)?.name || '');
@@ -409,7 +460,6 @@
                 });
             }
 
-            // 화면에 렌더링될 실제 멤버 정보 배열
             const orderingMembers = renderIds.map(id => {
                 const d = orders[id];
                 if (d.isManual) {
@@ -423,7 +473,6 @@
                 .filter(id => orders[id].isManual)
                 .map(id => ({ id, name: orders[id].name, gender: orders[id].gender, isManual: true, level: '👤', position: '직접추가', role: '게스트' }));
 
-            // 엑셀 다운로드 (화면상 정렬된 순서대로 추출)
             const exportToCSV = () => {
                 if (renderIds.length === 0) {
                     customAlert("구매 희망자가 없습니다.");
@@ -435,22 +484,26 @@
                 headers.push('상의 사이즈', '등번호', '마킹 이름');
                 if (activeBrand.hasShorts) headers.push('반바지 추가', '하의 사이즈');
 
-                const rows = renderIds.map(id => {
+                const rows = [];
+                renderIds.forEach(id => {
                     const d = orders[id];
+                    if (!d || !d.items) return;
                     const m = d.isManual ? { name: d.name, gender: d.gender } : members.find(x => x.id === id);
-                    if(!m) return null;
+                    if(!m) return;
                     
-                    const topSize = d.topSize || d.size || activeBrand.topSizes[0] || '100(L)';
-                    const bottomSize = d.includeShorts ? (d.bottomSize || activeBrand.bottomSizes[0] || '100(L)') : 'X';
-                    const sleeveType = d.sleeveType || '반팔';
-                    
-                    const rowData = [m.name, m.gender];
-                    if (activeBrand.hasSleeve) rowData.push(sleeveType);
-                    rowData.push(topSize, d.number, d.printName);
-                    if (activeBrand.hasShorts) rowData.push(d.includeShorts ? 'O' : 'X', bottomSize);
-                    
-                    return rowData.join(',');
-                }).filter(Boolean);
+                    d.items.forEach((item) => {
+                        const topSize = item.topSize || activeBrand.topSizes[0] || '100(L)';
+                        const bottomSize = item.includeShorts ? (item.bottomSize || activeBrand.bottomSizes[0] || '100(L)') : 'X';
+                        const sleeveType = item.sleeveType || '반팔';
+                        
+                        const rowData = [m.name, m.gender];
+                        if (activeBrand.hasSleeve) rowData.push(sleeveType);
+                        rowData.push(topSize, item.number, item.printName);
+                        if (activeBrand.hasShorts) rowData.push(item.includeShorts ? 'O' : 'X', bottomSize);
+                        
+                        rows.push(rowData.join(','));
+                    });
+                });
 
                 const csvContent = [headers.join(','), ...rows].join('\n');
                 const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -488,7 +541,7 @@
                             <div className="flex items-center gap-3 text-xs sm:text-sm font-black">
                                 <span className="text-slate-400">총원 <span className="text-slate-600">{members.length}</span></span>
                                 <span className="text-slate-200">|</span>
-                                <span className="text-slate-400">주문 <span className="text-blue-600">{orderedCount}</span></span>
+                                <span className="text-slate-400">총 <span className="text-blue-600">{totalOrderedItemsCount}</span>벌</span>
                                 <button onClick={() => window.location.reload()} className="p-2 ml-2 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all">
                                     <Icon.RefreshCw size={18} />
                                 </button>
@@ -513,9 +566,9 @@
                                 }`}
                             >
                                 <Icon.ClipboardList size={16} /> 2. 상세 정보 입력
-                                {orderedCount > 0 && (
+                                {totalOrderedItemsCount > 0 && (
                                     <span className="bg-blue-100 text-blue-600 text-[10px] px-2 py-0.5 rounded-full ml-1 font-black">
-                                        {orderedCount}
+                                        {totalOrderedItemsCount}벌
                                     </span>
                                 )}
                             </button>
@@ -541,28 +594,36 @@
                                     <div className="mb-8">
                                         <h3 className="text-sm font-black text-slate-500 mb-3 ml-1 uppercase tracking-widest flex items-center gap-1.5"><Icon.Users size={14}/> 직접 추가된 인원</h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                            {manualBuyersList.map(m => (
-                                                <div 
-                                                    key={m.id}
-                                                    onClick={() => toggleOrder(m)}
-                                                    className="p-5 sm:p-6 rounded-[32px] border-2 cursor-pointer relative group transition-all duration-200 border-blue-500 bg-blue-50/50 shadow-md ring-4 ring-blue-500/10"
-                                                >
-                                                    <div className="flex items-start gap-4 text-left">
-                                                        <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-xl font-black shadow-lg transition-transform bg-blue-600 text-white scale-110`}>
-                                                            <Icon.CheckCircle2 size={28} />
-                                                        </div>
-                                                        <div className="flex flex-col min-w-0 flex-1">
-                                                            <h3 className="text-xl sm:text-2xl font-black mb-1.5 transition-colors text-blue-800">
-                                                                {m.name}
-                                                            </h3>
-                                                            <div className="flex flex-nowrap items-center gap-1 w-full overflow-x-auto custom-scrollbar pb-1">
-                                                                <span className="flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border bg-slate-50 text-slate-400 border-slate-200 shadow-sm">{m.position}</span>
-                                                                <span className="flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black bg-pink-50 text-pink-500 shadow-sm uppercase">{m.gender}</span>
+                                            {manualBuyersList.map(m => {
+                                                const itemCount = orders[m.id]?.items?.length || 0;
+                                                return (
+                                                    <div 
+                                                        key={m.id}
+                                                        onClick={() => toggleOrder(m)}
+                                                        className="p-5 sm:p-6 rounded-[32px] border-2 cursor-pointer relative group transition-all duration-200 border-blue-500 bg-blue-50/50 shadow-md ring-4 ring-blue-500/10"
+                                                    >
+                                                        {itemCount > 1 && (
+                                                            <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[11px] font-black px-3 py-1.5 rounded-full shadow-md z-10 animate-zoom-in border-2 border-white">
+                                                                {itemCount}벌
+                                                            </span>
+                                                        )}
+                                                        <div className="flex items-start gap-4 text-left">
+                                                            <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-xl font-black shadow-lg transition-transform bg-blue-600 text-white scale-110`}>
+                                                                <Icon.CheckCircle2 size={28} />
+                                                            </div>
+                                                            <div className="flex flex-col min-w-0 flex-1">
+                                                                <h3 className="text-xl sm:text-2xl font-black mb-1.5 transition-colors text-blue-800">
+                                                                    {m.name}
+                                                                </h3>
+                                                                <div className="flex flex-nowrap items-center gap-1 w-full overflow-x-auto custom-scrollbar pb-1">
+                                                                    <span className="flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full border bg-slate-50 text-slate-400 border-slate-200 shadow-sm">{m.position}</span>
+                                                                    <span className="flex-shrink-0 text-[9px] px-2 py-0.5 rounded-lg font-black bg-pink-50 text-pink-500 shadow-sm uppercase">{m.gender}</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                )
+                                            })}
                                         </div>
                                     </div>
                                 )}
@@ -572,6 +633,7 @@
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                                         {members.map(m => {
                                             const isSelected = !!orders[m.id];
+                                            const itemCount = orders[m.id]?.items?.length || 0;
                                             return (
                                                 <div 
                                                     key={m.id}
@@ -582,6 +644,11 @@
                                                             : 'border-slate-100 bg-white hover:shadow-lg hover:border-slate-200'
                                                     }`}
                                                 >
+                                                    {isSelected && itemCount > 1 && (
+                                                        <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[11px] font-black px-3 py-1.5 rounded-full shadow-md z-10 animate-zoom-in border-2 border-white">
+                                                            {itemCount}벌
+                                                        </span>
+                                                    )}
                                                     <div className="flex items-start gap-4 text-left">
                                                         <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-xl font-black shadow-lg transition-transform ${isSelected ? 'bg-blue-600 text-white scale-110' : getGenderPastelClass(m.gender)}`}>
                                                             {isSelected ? <Icon.CheckCircle2 size={28} /> : m.level}
@@ -654,7 +721,7 @@
                                         
                                         {/* 커스텀 정렬 툴바 */}
                                         <div className="p-4 sm:px-6 bg-slate-50 border-b border-slate-100 flex flex-wrap justify-between items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{orderingMembers.length}</span>명</span>
+                                            <span className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{totalOrderedItemsCount}</span>벌 주문</span>
                                             <div className="flex gap-2">
                                                 <button onClick={() => applySort('name')} className={`px-3 py-1.5 border rounded-lg text-[11px] font-black transition-all flex items-center gap-1 shadow-sm ${sortConfig.key === 'name' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
                                                     <Icon.Users size={12}/> 이름순 {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? '↓' : '↑') : ''}
@@ -672,113 +739,140 @@
                                             <table className="w-full text-left border-collapse min-w-[1000px]">
                                                 <thead>
                                                     <tr className="text-slate-400 text-[11px] uppercase tracking-widest font-black border-b border-slate-100">
-                                                        <th className="p-4 pl-6 whitespace-nowrap">이름</th>
+                                                        <th className="p-4 pl-6 whitespace-nowrap">이름 및 품목 관리</th>
                                                         {activeBrand.hasSleeve && <th className="p-4 whitespace-nowrap">소매 기장</th>}
                                                         <th className="p-4 whitespace-nowrap">상의 사이즈</th>
                                                         <th className="p-4 whitespace-nowrap">등번호</th>
                                                         <th className="p-4 whitespace-nowrap">마킹 이름</th>
                                                         {activeBrand.hasShorts && <th className="p-4 text-center whitespace-nowrap">반바지 추가</th>}
                                                         {activeBrand.hasShorts && <th className="p-4 whitespace-nowrap text-center">하의 사이즈</th>}
+                                                        <th className="p-4 text-center whitespace-nowrap">관리</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {orderingMembers.map(member => (
-                                                        <tr key={member.id} className="hover:bg-slate-50/50 transition-colors group">
-                                                            <td className="p-5 pl-6">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getGenderPastelClass(member.gender)}`}>
-                                                                        {member.gender === '남성' ? 'M' : 'F'}
-                                                                    </div>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-black text-slate-800 text-base whitespace-nowrap">{member.name}</span>
-                                                                        {member.isManual && <span className="text-[9px] text-blue-500 font-bold">직접 추가됨</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            {activeBrand.hasSleeve && (
-                                                                <td className="p-3">
+                                                <tbody>
+                                                    {orderingMembers.map(member => {
+                                                        const orderData = orders[member.id];
+                                                        if (!orderData || !orderData.items) return null;
+                                                        
+                                                        return orderData.items.map((item, index) => (
+                                                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                                {/* 첫 번째 품목에만 사람 이름 표시 (rowSpan 효과를 위해 렌더링) */}
+                                                                {index === 0 && (
+                                                                    <td rowSpan={orderData.items.length} className="p-5 pl-6 border-b border-r border-slate-100 align-top bg-white relative">
+                                                                        <div className="flex flex-col items-start gap-4">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${getGenderPastelClass(member.gender)}`}>
+                                                                                    {member.gender === '남성' ? 'M' : 'F'}
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="font-black text-slate-800 text-base whitespace-nowrap">{member.name}</span>
+                                                                                    {member.isManual && <span className="text-[9px] text-blue-500 font-bold mt-0.5">직접 추가됨</span>}
+                                                                                </div>
+                                                                            </div>
+                                                                            <button 
+                                                                                onClick={() => addOrderItem(member.id, member.name)} 
+                                                                                className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg font-black hover:bg-blue-100 transition-all border border-blue-100 active:scale-95"
+                                                                            >
+                                                                                <Icon.Plus size={12} /> 추가 주문
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+                                                                
+                                                                {activeBrand.hasSleeve && (
+                                                                    <td className="p-3 border-b border-slate-100">
+                                                                        <div className="relative">
+                                                                            <select 
+                                                                                value={item.sleeveType}
+                                                                                onChange={(e) => updateOrderDetail(member.id, item.id, 'sleeveType', e.target.value)}
+                                                                                className="w-full p-3 pr-8 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                                                                            >
+                                                                                <option value="반팔">반팔</option>
+                                                                                <option value="긴팔">긴팔</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </td>
+                                                                )}
+                                                                <td className="p-3 border-b border-slate-100">
                                                                     <div className="relative">
                                                                         <select 
-                                                                            value={orders[member.id].sleeveType || '반팔'}
-                                                                            onChange={(e) => updateOrderDetail(member.id, 'sleeveType', e.target.value)}
+                                                                            value={item.topSize}
+                                                                            onChange={(e) => updateOrderDetail(member.id, item.id, 'topSize', e.target.value)}
                                                                             className="w-full p-3 pr-8 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
                                                                         >
-                                                                            <option value="반팔">반팔</option>
-                                                                            <option value="긴팔">긴팔</option>
+                                                                            {activeBrand.topSizes.map(size => (
+                                                                                <option key={size} value={size}>{size}</option>
+                                                                            ))}
                                                                         </select>
                                                                     </div>
                                                                 </td>
-                                                            )}
-                                                            <td className="p-3">
-                                                                <div className="relative">
-                                                                    <select 
-                                                                        value={orders[member.id].topSize || orders[member.id].size || activeBrand.topSizes[0] || ''}
-                                                                        onChange={(e) => updateOrderDetail(member.id, 'topSize', e.target.value)}
-                                                                        className="w-full p-3 pr-8 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                                                                <td className="p-3 border-b border-slate-100">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="0" 
+                                                                        max="99"
+                                                                        placeholder="0~99"
+                                                                        value={item.number}
+                                                                        onChange={(e) => updateOrderDetail(member.id, item.id, 'number', e.target.value)}
+                                                                        className="w-20 p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all text-center placeholder:font-bold"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-3 border-b border-slate-100">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={item.printName}
+                                                                        onChange={(e) => updateOrderDetail(member.id, item.id, 'printName', e.target.value)}
+                                                                        className="w-full p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all"
+                                                                    />
+                                                                </td>
+                                                                {activeBrand.hasShorts && (
+                                                                    <td className="p-3 text-center border-b border-slate-100">
+                                                                        <label className="inline-flex items-center justify-center cursor-pointer p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                checked={item.includeShorts}
+                                                                                onChange={(e) => updateOrderDetail(member.id, item.id, 'includeShorts', e.target.checked)}
+                                                                                className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                                                                            />
+                                                                            <span className={`ml-2 text-xs font-black whitespace-nowrap ${item.includeShorts ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                                                {item.includeShorts ? '추가함' : '미추가'}
+                                                                            </span>
+                                                                        </label>
+                                                                    </td>
+                                                                )}
+                                                                {activeBrand.hasShorts && (
+                                                                    <td className="p-3 border-b border-slate-100">
+                                                                        {item.includeShorts ? (
+                                                                            <div className="relative animate-fade-in">
+                                                                                <select 
+                                                                                    value={item.bottomSize}
+                                                                                    onChange={(e) => updateOrderDetail(member.id, item.id, 'bottomSize', e.target.value)}
+                                                                                    className="w-full p-3 pr-8 bg-blue-50 rounded-xl font-black text-blue-700 outline-none border-2 border-blue-200 focus:border-blue-400 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
+                                                                                >
+                                                                                    {activeBrand.bottomSizes.map(size => (
+                                                                                        <option key={size} value={size}>{size}</option>
+                                                                                    ))}
+                                                                                </select>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="w-full p-3 bg-slate-100/50 rounded-xl font-black text-slate-300 text-sm text-center border-2 border-transparent select-none whitespace-nowrap">
+                                                                                선택 안함
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                )}
+                                                                <td className="p-3 text-center border-b border-slate-100">
+                                                                    <button 
+                                                                        onClick={() => removeOrderItem(member.id, item.id)} 
+                                                                        className="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all outline-none"
+                                                                        title="이 품목 삭제"
                                                                     >
-                                                                        {activeBrand.topSizes.map(size => (
-                                                                            <option key={size} value={size}>{size}</option>
-                                                                        ))}
-                                                                    </select>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-3">
-                                                                <input 
-                                                                    type="number" 
-                                                                    min="0" 
-                                                                    max="99"
-                                                                    placeholder="0~99"
-                                                                    value={orders[member.id].number}
-                                                                    onChange={(e) => updateOrderDetail(member.id, 'number', e.target.value)}
-                                                                    className="w-20 p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all text-center placeholder:font-bold"
-                                                                />
-                                                            </td>
-                                                            <td className="p-3">
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={orders[member.id].printName}
-                                                                    onChange={(e) => updateOrderDetail(member.id, 'printName', e.target.value)}
-                                                                    className="w-full p-3 bg-slate-50 rounded-xl font-black text-slate-700 outline-none border-2 border-transparent focus:border-blue-200 focus:bg-white text-sm transition-all"
-                                                                />
-                                                            </td>
-                                                            {activeBrand.hasShorts && (
-                                                                <td className="p-3 text-center">
-                                                                    <label className="inline-flex items-center justify-center cursor-pointer p-2 rounded-xl hover:bg-slate-100 transition-colors">
-                                                                        <input 
-                                                                            type="checkbox" 
-                                                                            checked={orders[member.id].includeShorts}
-                                                                            onChange={(e) => updateOrderDetail(member.id, 'includeShorts', e.target.checked)}
-                                                                            className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
-                                                                        />
-                                                                        <span className={`ml-2 text-xs font-black whitespace-nowrap ${orders[member.id].includeShorts ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                                            {orders[member.id].includeShorts ? '추가함' : '미추가'}
-                                                                        </span>
-                                                                    </label>
+                                                                        <Icon.Trash2 size={18} />
+                                                                    </button>
                                                                 </td>
-                                                            )}
-                                                            {activeBrand.hasShorts && (
-                                                                <td className="p-3">
-                                                                    {orders[member.id].includeShorts ? (
-                                                                        <div className="relative animate-fade-in">
-                                                                            <select 
-                                                                                value={orders[member.id].bottomSize || activeBrand.bottomSizes[0] || ''}
-                                                                                onChange={(e) => updateOrderDetail(member.id, 'bottomSize', e.target.value)}
-                                                                                className="w-full p-3 pr-8 bg-blue-50 rounded-xl font-black text-blue-700 outline-none border-2 border-blue-200 focus:border-blue-400 focus:bg-white text-sm transition-all appearance-none cursor-pointer"
-                                                                            >
-                                                                                {activeBrand.bottomSizes.map(size => (
-                                                                                    <option key={size} value={size}>{size}</option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="w-full p-3 bg-slate-100/50 rounded-xl font-black text-slate-300 text-sm text-center border-2 border-transparent select-none whitespace-nowrap">
-                                                                            선택 안함
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                            )}
-                                                        </tr>
-                                                    ))}
+                                                            </tr>
+                                                        ));
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -968,7 +1062,7 @@
                                 <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
                                     <Icon.AlertCircle size={32} />
                                 </div>
-                                <p className="text-slate-800 font-black mb-8 text-base">{modalConfig.message}</p>
+                                <p className="text-slate-800 font-black mb-8 text-base whitespace-pre-wrap">{modalConfig.message}</p>
                                 <div className="flex gap-3">
                                     {modalConfig.type === 'confirm' && (
                                         <button onClick={() => setModalConfig(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 font-black rounded-2xl active:scale-95 transition-all text-sm">취소</button>
