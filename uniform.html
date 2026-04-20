@@ -92,6 +92,7 @@
             X: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
             Save: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
             AlertCircle: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+            Hash: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>,
         };
 
         const SIZES = ['85(XS)', '90(S)', '95(M)', '100(L)', '105(XL)', '110(2XL)', '115(3XL)'];
@@ -136,7 +137,7 @@
 
             // 수동 추가 및 정렬 고정 관련 State
             const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-            const [manualForm, setManualForm] = useState({ name: '', gender: '남성' });
+            const [manualForm, setManualForm] = useState({ id: null, name: '', gender: '남성' });
             
             const [customOrder, setCustomOrder] = useState(null);
             const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -231,16 +232,26 @@
             const saveOrdersToFirebase = async (newOrders) => {
                 try {
                     const ordersRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('uniform_settings').doc('current_order');
-                    await ordersRef.set({ 
+                    
+                    // Firebase의 merge 속성 때문에 삭제된 데이터가 계속 되살아나는 버그를 수정 (update 사용)
+                    await ordersRef.update({ 
                         data: newOrders,
                         updatedAt: new Date().toISOString()
-                    }, { merge: true }); 
+                    }).catch(() => {
+                        // 데이터가 아예 없는 초기 상태일 경우 에러를 잡아서 새로 생성 (set 사용)
+                        return ordersRef.set({
+                            data: newOrders,
+                            brandId: selectedBrandId,
+                            updatedAt: new Date().toISOString()
+                        });
+                    });
                 } catch (e) {
                     console.error("Order save failed:", e);
                 }
             };
 
             const toggleOrder = (member) => {
+                if (member.isManual) return; // 직접 추가된 인원은 클릭으로 해제되지 않고, 휴지통 버튼으로만 명단에서 삭제 가능
                 const newOrders = { ...orders };
                 if (newOrders[member.id]) {
                     delete newOrders[member.id];
@@ -382,13 +393,23 @@
                 setBrandForm({ ...brandForm, bottomSizes: brandForm.bottomSizes.filter(s => s !== sizeToRemove) });
             };
 
-            const handleAddManualBuyer = () => {
+            const handleSaveManualBuyer = () => {
                 if (!manualForm.name.trim()) return customAlert('이름을 입력해주세요.');
                 
-                const manualId = `manual_${Date.now()}`;
-                const newOrders = {
-                    ...orders,
-                    [manualId]: { 
+                const newOrders = { ...orders };
+                
+                if (manualForm.id) {
+                    // 기존 인원 정보 수정
+                    newOrders[manualForm.id] = {
+                        ...newOrders[manualForm.id],
+                        name: manualForm.name.trim(),
+                        gender: manualForm.gender
+                    };
+                    customAlert(`${manualForm.name.trim()} 님 정보가 수정되었습니다.`);
+                } else {
+                    // 신규 추가
+                    const manualId = `manual_${Date.now()}`;
+                    newOrders[manualId] = { 
                         isManual: true,
                         name: manualForm.name.trim(),
                         gender: manualForm.gender,
@@ -401,13 +422,30 @@
                             printName: manualForm.name.trim(), 
                             includeShorts: false 
                         }]
-                    }
-                };
+                    };
+                    customAlert(`${manualForm.name.trim()} 님이 직접 추가되었습니다.`);
+                }
                 
                 setOrders(newOrders);
                 saveOrdersToFirebase(newOrders);
                 setIsManualModalOpen(false);
-                setManualForm({ name: '', gender: '남성' });
+                setManualForm({ id: null, name: '', gender: '남성' });
+            };
+
+            const handleEditManualBuyer = (e, m) => {
+                e.stopPropagation();
+                setManualForm({ id: m.id, name: m.name, gender: m.gender });
+                setIsManualModalOpen(true);
+            };
+
+            const handleDeleteManualBuyer = (e, id) => {
+                e.stopPropagation();
+                customConfirm('이 인원을 명단에서 완전히 삭제하시겠습니까?', () => {
+                    const newOrders = { ...orders };
+                    delete newOrders[id];
+                    setOrders(newOrders);
+                    saveOrdersToFirebase(newOrders);
+                });
             };
 
             const applySort = (type) => {
@@ -436,6 +474,18 @@
                         } else {
                             comp = nameA.localeCompare(nameB);
                         }
+                    } else if (type === 'number') {
+                        // 첫 번째 아이템의 등번호 기준으로 정렬 (빈 값은 맨 뒤로)
+                        const valA = orderA.items?.[0]?.number;
+                        const valB = orderB.items?.[0]?.number;
+                        const numA = valA !== '' && valA != null ? parseInt(valA, 10) : Infinity;
+                        const numB = valB !== '' && valB != null ? parseInt(valB, 10) : Infinity;
+                        
+                        if (numA !== numB) {
+                            comp = numA - numB;
+                        } else {
+                            comp = nameA.localeCompare(nameB);
+                        }
                     }
                     
                     return newDirection === 'asc' ? comp : -comp;
@@ -446,6 +496,9 @@
 
             // 전체 주문 품목의 수 (벌 수)
             const totalOrderedItemsCount = Object.values(orders).reduce((acc, curr) => acc + (curr.items ? curr.items.length : 0), 0);
+            
+            // 구매자 수 (인원 수)
+            const orderedCount = Object.keys(orders).length;
             
             let renderIds = Object.keys(orders);
             if (customOrder) {
@@ -538,11 +591,13 @@
                                     <span className="text-slate-400 font-bold text-xs uppercase hidden sm:flex items-center gap-1"><Icon.Shirt size={14}/> 유니폼 주문 시스템</span>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 text-xs sm:text-sm font-black">
+                            <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-black">
                                 <span className="text-slate-400">총원 <span className="text-slate-600">{members.length}</span></span>
                                 <span className="text-slate-200">|</span>
+                                <span className="text-slate-400">구매 <span className="text-blue-600">{orderedCount}</span>명</span>
+                                <span className="text-slate-200">|</span>
                                 <span className="text-slate-400">총 <span className="text-blue-600">{totalOrderedItemsCount}</span>벌</span>
-                                <button onClick={() => window.location.reload()} className="p-2 ml-2 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all">
+                                <button onClick={() => window.location.reload()} className="p-2 ml-1 sm:ml-2 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 transition-all">
                                     <Icon.RefreshCw size={18} />
                                 </button>
                             </div>
@@ -583,7 +638,7 @@
                                         <p className="text-xs font-bold text-slate-400 mt-1">유니폼을 구매할 회원의 카드를 탭하여 선택해주세요.</p>
                                     </div>
                                     <button 
-                                        onClick={() => setIsManualModalOpen(true)}
+                                        onClick={() => { setManualForm({ id: null, name: '', gender: '남성' }); setIsManualModalOpen(true); }}
                                         className="flex justify-center items-center gap-2 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 px-5 py-2.5 rounded-xl font-black transition-all active:scale-95 text-sm border border-blue-200"
                                     >
                                         <Icon.UserPlus size={16} /> 명단에 없는 인원 직접 추가
@@ -602,6 +657,10 @@
                                                         onClick={() => toggleOrder(m)}
                                                         className="p-5 sm:p-6 rounded-[32px] border-2 cursor-pointer relative group transition-all duration-200 border-blue-500 bg-blue-50/50 shadow-md ring-4 ring-blue-500/10"
                                                     >
+                                                        <div className="absolute top-4 right-4 flex gap-1.5 z-20 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={(e) => handleEditManualBuyer(e, m)} className="p-1.5 bg-white border border-blue-200 text-blue-500 hover:bg-blue-600 hover:text-white rounded-lg shadow-sm transition-all" title="이름/성별 수정"><Icon.Edit2 size={14}/></button>
+                                                            <button onClick={(e) => handleDeleteManualBuyer(e, m.id)} className="p-1.5 bg-white border border-red-200 text-red-500 hover:bg-red-600 hover:text-white rounded-lg shadow-sm transition-all" title="삭제"><Icon.Trash2 size={14}/></button>
+                                                        </div>
                                                         {itemCount > 1 && (
                                                             <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-[11px] font-black px-3 py-1.5 rounded-full shadow-md z-10 animate-zoom-in border-2 border-white">
                                                                 {itemCount}벌
@@ -722,12 +781,15 @@
                                         {/* 커스텀 정렬 툴바 */}
                                         <div className="p-4 sm:px-6 bg-slate-50 border-b border-slate-100 flex flex-wrap justify-between items-center gap-2">
                                             <span className="text-xs font-bold text-slate-500">총 <span className="text-blue-600 font-black">{totalOrderedItemsCount}</span>벌 주문</span>
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap gap-2">
                                                 <button onClick={() => applySort('name')} className={`px-3 py-1.5 border rounded-lg text-[11px] font-black transition-all flex items-center gap-1 shadow-sm ${sortConfig.key === 'name' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
                                                     <Icon.Users size={12}/> 이름순 {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? '↓' : '↑') : ''}
                                                 </button>
                                                 <button onClick={() => applySort('size')} className={`px-3 py-1.5 border rounded-lg text-[11px] font-black transition-all flex items-center gap-1 shadow-sm ${sortConfig.key === 'size' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-                                                    <Icon.Shirt size={12}/> 상의 사이즈순 {sortConfig.key === 'size' ? (sortConfig.direction === 'asc' ? '↓' : '↑') : ''}
+                                                    <Icon.Shirt size={12}/> 사이즈순 {sortConfig.key === 'size' ? (sortConfig.direction === 'asc' ? '↓' : '↑') : ''}
+                                                </button>
+                                                <button onClick={() => applySort('number')} className={`px-3 py-1.5 border rounded-lg text-[11px] font-black transition-all flex items-center gap-1 shadow-sm ${sortConfig.key === 'number' ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                                                    <Icon.Hash size={12}/> 번호순 {sortConfig.key === 'number' ? (sortConfig.direction === 'asc' ? '↓' : '↑') : ''}
                                                 </button>
                                                 <button onClick={() => { setCustomOrder(null); setSortConfig({ key: null, direction: 'asc' }); }} className="px-3 py-1.5 bg-slate-200 text-slate-500 rounded-lg text-[11px] font-black hover:bg-slate-300 transition-all shadow-sm">
                                                     초기화
@@ -1004,15 +1066,15 @@
                         </div>
                     )}
 
-                    {/* 수동 인원 추가 모달 */}
+                    {/* 수동 인원 추가/수정 모달 */}
                     {isManualModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[6000] flex justify-center items-center p-4 animate-fade-in" onClick={() => setIsManualModalOpen(false)}>
                             <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden flex flex-col animate-zoom-in p-6 sm:p-8" onClick={e => e.stopPropagation()}>
                                 <div className="text-center mb-6">
                                     <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-                                        <Icon.UserPlus size={28} />
+                                        {manualForm.id ? <Icon.Edit2 size={28} /> : <Icon.UserPlus size={28} />}
                                     </div>
-                                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter">직접 인원 추가</h2>
+                                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter">{manualForm.id ? '직접 인원 수정' : '직접 인원 추가'}</h2>
                                     <p className="text-xs font-bold text-slate-400 mt-2">지인, 가족 등 명단에 없는 인원을<br/>주문 목록에 추가합니다.</p>
                                 </div>
                                 
@@ -1048,8 +1110,8 @@
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <button onClick={() => setIsManualModalOpen(false)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 font-black rounded-2xl text-sm hover:bg-slate-50 transition-all shadow-sm">취소</button>
-                                    <button onClick={handleAddManualBuyer} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-sm shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">추가하기</button>
+                                    <button onClick={() => { setIsManualModalOpen(false); setManualForm({ id: null, name: '', gender: '남성' }); }} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 font-black rounded-2xl text-sm hover:bg-slate-50 transition-all shadow-sm">취소</button>
+                                    <button onClick={handleSaveManualBuyer} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-sm shadow-md shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all">{manualForm.id ? '수정하기' : '추가하기'}</button>
                                 </div>
                             </div>
                         </div>
